@@ -1,43 +1,67 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
-import {GeneralTypes, PostTypes} from 'mattermost-redux/action_types';
-import {Client4} from 'mattermost-redux/client';
-import {General} from 'mattermost-redux/constants';
-import {markChannelAsRead} from 'mattermost-redux/actions/channels';
-import {getClientConfig, getDataRetentionPolicy, getLicenseConfig} from 'mattermost-redux/actions/general';
-import {getPosts} from 'mattermost-redux/actions/posts';
-import {getMyTeams, getMyTeamMembers, selectTeam} from 'mattermost-redux/actions/teams';
+import {batchActions} from 'redux-batched-actions';
 
-import {recordTime} from 'app/utils/segment';
+import {ChannelTypes, GeneralTypes, TeamTypes} from '@mm-redux/action_types';
+import {fetchMyChannelsAndMembers} from '@mm-redux/actions/channels';
+import {getDataRetentionPolicy} from '@mm-redux/actions/general';
+import {receivedNewPost} from '@mm-redux/actions/posts';
+import {getMyTeams, getMyTeamMembers} from '@mm-redux/actions/teams';
+import {Client4} from '@mm-redux/client';
+import {General} from '@mm-redux/constants';
+import EventEmitter from '@mm-redux/utils/event_emitter';
 
-import {
-    handleSelectChannel,
-    setChannelDisplayName,
-    retryGetPostsAction
-} from 'app/actions/views/channel';
+import {NavigationTypes, ViewTypes} from '@constants';
+import EphemeralStore from '@store/ephemeral_store';
+import initialState from '@store/initial_state';
+import {getStateForReset} from '@store/utils';
+import {recordTime} from '@utils/segment';
+
+import {markChannelViewedAndRead} from './channel';
+
+export function startDataCleanup() {
+    return async (dispatch, getState) => {
+        dispatch({
+            type: ViewTypes.DATA_CLEANUP,
+            payload: getState(),
+        });
+    };
+}
 
 export function loadConfigAndLicense() {
     return async (dispatch, getState) => {
         const {currentUserId} = getState().entities.users;
-        const [configData, licenseData] = await Promise.all([
-            getClientConfig()(dispatch, getState),
-            getLicenseConfig()(dispatch, getState)
-        ]);
 
-        const config = configData.data || {};
-        const license = licenseData.data || {};
+        try {
+            const [config, license] = await Promise.all([
+                Client4.getClientConfigOld(),
+                Client4.getClientLicenseOld(),
+            ]);
 
-        if (currentUserId) {
-            if (config.DataRetentionEnableMessageDeletion && config.DataRetentionEnableMessageDeletion === 'true' &&
-                license.IsLicensed === 'true' && license.DataRetention === 'true') {
-                getDataRetentionPolicy()(dispatch, getState);
-            } else {
-                dispatch({type: GeneralTypes.RECEIVED_DATA_RETENTION_POLICY, data: {}});
+            const actions = [{
+                type: GeneralTypes.CLIENT_CONFIG_RECEIVED,
+                data: config,
+            }, {
+                type: GeneralTypes.CLIENT_LICENSE_RECEIVED,
+                data: license,
+            }];
+
+            if (currentUserId) {
+                if (config.DataRetentionEnableMessageDeletion && config.DataRetentionEnableMessageDeletion === 'true' &&
+                    license.IsLicensed === 'true' && license.DataRetention === 'true') {
+                    dispatch(getDataRetentionPolicy());
+                } else {
+                    actions.push({type: GeneralTypes.RECEIVED_DATA_RETENTION_POLICY, data: {}});
+                }
             }
-        }
 
-        return {config, license};
+            dispatch(batchActions(actions, 'BATCH_LOAD_CONFIG_AND_LICENSE'));
+
+            return {config, license};
+        } catch (error) {
+            return {error};
+        }
     };
 }
 
@@ -46,45 +70,93 @@ export function loadFromPushNotification(notification) {
         const state = getState();
         const {data} = notification;
         const {currentTeamId, teams, myMembers: myTeamMembers} = state.entities.teams;
-        const {currentChannelId} = state.entities.channels;
-        const channelId = data.channel_id;
+        const {channels} = state.entities.channels;
 
-        // when the notification does not have a team id is because its from a DM or GM
-        const teamId = data.team_id || currentTeamId;
+        let channelId = '';
+        let teamId = currentTeamId;
+        if (data) {
+            channelId = data.channel_id;
 
-        //verify that we have the team loaded
-        if (teamId && (!teams[teamId] || !myTeamMembers[teamId])) {
-            await Promise.all([
-                getMyTeams()(dispatch, getState),
-                getMyTeamMembers()(dispatch, getState)
-            ]);
+            // when the notification does not have a team id is because its from a DM or GM
+            teamId = data.team_id || currentTeamId;
         }
+
+        // load any missing data
+        const loading = [];
+
+        if (teamId && (!teams[teamId] || !myTeamMembers[teamId])) {
+            loading.push(dispatch(getMyTeams()));
+            loading.push(dispatch(getMyTeamMembers()));
+        }
+
+        if (channelId && !channels[channelId]) {
+            loading.push(dispatch(fetchMyChannelsAndMembers(teamId)));
+        }
+
+        if (loading.length > 0) {
+            await Promise.all(loading);
+        }
+
+        dispatch(handleSelectTeamAndChannel(teamId, channelId));
+    };
+}
+
+export function handleSelectTeamAndChannel(teamId, channelId) {
+    return async (dispatch, getState) => {
+        const dt = Date.now();
+        const state = getState();
+        const {channels, currentChannelId, myMembers} = state.entities.channels;
+        const {currentTeamId} = state.entities.teams;
+        const channel = channels[channelId];
+        const member = myMembers[channelId];
+        const actions = [];
 
         // when the notification is from a team other than the current team
         if (teamId !== currentTeamId) {
-            selectTeam({id: teamId})(dispatch, getState);
+            actions.push({type: TeamTypes.SELECT_TEAM, data: teamId});
         }
 
-        // when the notification is from the same channel as the current channel
-        // we should get the posts
-        if (channelId === currentChannelId) {
-            markChannelAsRead(channelId, null, false)(dispatch, getState);
-            await retryGetPostsAction(getPosts(channelId), dispatch, getState);
-        } else {
-            // when the notification is from a channel other than the current channel
-            markChannelAsRead(channelId, currentChannelId, false)(dispatch, getState);
-            dispatch(setChannelDisplayName(''));
-            handleSelectChannel(channelId)(dispatch, getState);
+        if (channel && currentChannelId !== channelId) {
+            actions.push({
+                type: ChannelTypes.SELECT_CHANNEL,
+                data: channelId,
+                extra: {
+                    channel,
+                    member,
+                    teamId: channel.team_id || currentTeamId,
+                },
+            });
+
+            dispatch(markChannelViewedAndRead(channelId));
         }
+
+        if (actions.length) {
+            dispatch(batchActions(actions, 'BATCH_SELECT_TEAM_AND_CHANNEL'));
+        }
+
+        EphemeralStore.setStartFromNotification(false);
+
+        console.log('channel switch from push notification to', channel?.display_name, (Date.now() - dt), 'ms'); //eslint-disable-line
     };
 }
 
 export function purgeOfflineStore() {
-    return {type: General.OFFLINE_STORE_PURGE};
+    return (dispatch, getState) => {
+        const currentState = getState();
+
+        dispatch({
+            type: General.OFFLINE_STORE_PURGE,
+            state: getStateForReset(initialState, currentState),
+        });
+
+        EventEmitter.emit(NavigationTypes.RESTART_APP);
+    };
 }
 
-export function createPost(post) {
-    return (dispatch, getState) => {
+// A non-optimistic version of the createPost action in app/mm-redux with the file handling
+// removed since it's not needed.
+export function createPostForNotificationReply(post) {
+    return async (dispatch, getState) => {
         const state = getState();
         const currentUserId = state.entities.users.currentUserId;
 
@@ -95,21 +167,17 @@ export function createPost(post) {
             ...post,
             pending_post_id: pendingPostId,
             create_at: timestamp,
-            update_at: timestamp
+            update_at: timestamp,
         };
 
-        return Client4.createPost({...newPost, create_at: 0}).then((payload) => {
-            dispatch({
-                type: PostTypes.RECEIVED_POSTS,
-                data: {
-                    order: [],
-                    posts: {
-                        [payload.id]: payload
-                    }
-                },
-                channelId: payload.channel_id
-            });
-        });
+        try {
+            const data = await Client4.createPost({...newPost, create_at: 0});
+            dispatch(receivedNewPost(data));
+
+            return {data};
+        } catch (error) {
+            return {error};
+        }
     };
 }
 
@@ -121,8 +189,15 @@ export function recordLoadTime(screenName, category) {
     };
 }
 
+export function setDeepLinkURL(url) {
+    return {
+        type: ViewTypes.SET_DEEP_LINK_URL,
+        url,
+    };
+}
+
 export default {
     loadConfigAndLicense,
     loadFromPushNotification,
-    purgeOfflineStore
+    purgeOfflineStore,
 };

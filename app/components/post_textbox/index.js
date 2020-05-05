@@ -1,50 +1,100 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
-import {General} from 'mattermost-redux/constants';
-
-import {createPost} from 'mattermost-redux/actions/posts';
-import {getCurrentChannel} from 'mattermost-redux/selectors/entities/channels';
-import {canUploadFilesOnMobile} from 'mattermost-redux/selectors/entities/general';
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
-import {getCurrentUserId} from 'mattermost-redux/selectors/entities/users';
+import {isMinimumServerVersion} from '@mm-redux/utils/helpers';
+import {General, Permissions} from '@mm-redux/constants';
+import {createPost} from '@mm-redux/actions/posts';
+import {setStatus} from '@mm-redux/actions/users';
+import {getCurrentChannel, isCurrentChannelReadOnly, getCurrentChannelStats} from '@mm-redux/selectors/entities/channels';
+import {haveIChannelPermission} from '@mm-redux/selectors/entities/roles';
+import {canUploadFilesOnMobile, getConfig} from '@mm-redux/selectors/entities/general';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {getCurrentUserId, getStatusForUserId} from '@mm-redux/selectors/entities/users';
+import {getChannelTimezones} from '@mm-redux/actions/channels';
 
 import {executeCommand} from 'app/actions/views/command';
 import {addReactionToLatestPost} from 'app/actions/views/emoji';
-import {handlePostDraftChanged, handlePostDraftSelectionChanged} from 'app/actions/views/channel';
-import {handleClearFiles, handleClearFailedFiles, handleRemoveLastFile, handleUploadFiles} from 'app/actions/views/file_upload';
+import {handlePostDraftChanged, selectPenultimateChannel} from 'app/actions/views/channel';
+import {handleClearFiles, handleClearFailedFiles, handleRemoveLastFile, initUploadFiles} from 'app/actions/views/file_upload';
 import {handleCommentDraftChanged, handleCommentDraftSelectionChanged} from 'app/actions/views/thread';
 import {userTyping} from 'app/actions/views/typing';
 import {getCurrentChannelDraft, getThreadDraft} from 'app/selectors/views';
 import {getChannelMembersForDm} from 'app/selectors/channel';
+import {getAllowedServerMaxFileSize} from 'app/utils/file';
+import {isLandscape} from 'app/selectors/device';
 
 import PostTextbox from './post_textbox';
 
-function mapStateToProps(state, ownProps) {
+const MAX_MESSAGE_LENGTH = 4000;
+
+export function mapStateToProps(state, ownProps) {
     const currentDraft = ownProps.rootId ? getThreadDraft(state, ownProps.rootId) : getCurrentChannelDraft(state);
+    const config = getConfig(state);
 
     const currentChannel = getCurrentChannel(state);
     let deactivatedChannel = false;
-    if (currentChannel.type === General.DM_CHANNEL) {
+    if (currentChannel && currentChannel.type === General.DM_CHANNEL) {
         const teammate = getChannelMembersForDm(state, currentChannel);
         if (teammate.length && teammate[0].delete_at) {
             deactivatedChannel = true;
         }
     }
 
+    const currentUserId = getCurrentUserId(state);
+    const status = getStatusForUserId(state, currentUserId);
+    const userIsOutOfOffice = status === General.OUT_OF_OFFICE;
+    const enableConfirmNotificationsToChannel = config?.EnableConfirmNotificationsToChannel === 'true';
+    const currentChannelStats = getCurrentChannelStats(state);
+    const currentChannelMembersCount = currentChannelStats?.member_count || 0; // eslint-disable-line camelcase
+    const isTimezoneEnabled = config?.ExperimentalTimezone === 'true';
+
+    let canPost = true;
+    let useChannelMentions = true;
+    if (isMinimumServerVersion(state.entities.general.serverVersion, 5, 22)) {
+        canPost = haveIChannelPermission(
+            state,
+            {
+                channel: currentChannel.id,
+                team: currentChannel.team_id,
+                permission: Permissions.CREATE_POST,
+            },
+        );
+
+        useChannelMentions = haveIChannelPermission(
+            state,
+            {
+                channel: currentChannel.id,
+                permission: Permissions.USE_CHANNEL_MENTIONS,
+            },
+        );
+    }
+
     return {
-        channelId: ownProps.channelId || currentChannel.id,
+        currentChannel,
+        channelId: ownProps.channelId || (currentChannel ? currentChannel.id : ''),
+        channelTeamId: currentChannel ? currentChannel.team_id : '',
         canUploadFiles: canUploadFilesOnMobile(state),
-        channelIsLoading: state.views.channel.loading,
-        currentUserId: getCurrentUserId(state),
+        channelDisplayName: state.views.channel.displayName || (currentChannel ? currentChannel.display_name : ''),
+        channelIsReadOnly: isCurrentChannelReadOnly(state) || false,
+        channelIsArchived: ownProps.channelIsArchived || (currentChannel ? currentChannel.delete_at !== 0 : false),
+        currentUserId,
+        userIsOutOfOffice,
         deactivatedChannel,
         files: currentDraft.files,
+        maxFileSize: getAllowedServerMaxFileSize(config),
+        maxMessageLength: (config && parseInt(config.MaxPostSize || 0, 10)) || MAX_MESSAGE_LENGTH,
         theme: getTheme(state),
         uploadFileRequestStatus: state.requests.files.uploadFiles.status,
-        value: currentDraft.draft
+        value: currentDraft.draft,
+        enableConfirmNotificationsToChannel,
+        currentChannelMembersCount,
+        isTimezoneEnabled,
+        isLandscape: isLandscape(state),
+        canPost,
+        useChannelMentions,
     };
 }
 
@@ -59,12 +109,14 @@ function mapDispatchToProps(dispatch) {
             handleCommentDraftChanged,
             handlePostDraftChanged,
             handleRemoveLastFile,
-            handleUploadFiles,
+            initUploadFiles,
             userTyping,
-            handlePostDraftSelectionChanged,
-            handleCommentDraftSelectionChanged
-        }, dispatch)
+            handleCommentDraftSelectionChanged,
+            setStatus,
+            selectPenultimateChannel,
+            getChannelTimezones,
+        }, dispatch),
     };
 }
 
-export default connect(mapStateToProps, mapDispatchToProps, null, {withRef: true})(PostTextbox);
+export default connect(mapStateToProps, mapDispatchToProps, null, {forwardRef: true})(PostTextbox);

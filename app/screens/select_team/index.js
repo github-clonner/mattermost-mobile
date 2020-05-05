@@ -1,44 +1,45 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
+import {getTeams, addUserToTeam, joinTeam} from '@mm-redux/actions/teams';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {getJoinableTeams} from '@mm-redux/selectors/entities/teams';
+import {getCurrentUser} from '@mm-redux/selectors/entities/users';
+
+import {logout} from 'app/actions/views/user';
 import {handleTeamChange} from 'app/actions/views/select_team';
-
-import {markChannelAsRead} from 'mattermost-redux/actions/channels';
-import {joinTeam} from 'mattermost-redux/actions/teams';
-import {logout} from 'mattermost-redux/actions/users';
-import {getCurrentChannelId} from 'mattermost-redux/selectors/entities/channels';
-import {getJoinableTeams} from 'mattermost-redux/selectors/entities/teams';
-
-import {getCurrentLocale} from 'app/selectors/i18n';
+import {isLandscape} from 'app/selectors/device';
+import {isGuest} from 'app/utils/users';
 
 import SelectTeam from './select_team.js';
 
 function mapStateToProps(state) {
-    const locale = getCurrentLocale(state);
-
-    function sortTeams(a, b) {
-        return a.display_name.localeCompare(b.display_name, locale, {numeric: true});
-    }
+    const currentUser = getCurrentUser(state);
+    const currentUserIsGuest = isGuest(currentUser);
 
     return {
-        teamsRequest: state.requests.teams.getMyTeams,
-        teams: Object.values(getJoinableTeams(state)).sort(sortTeams),
-        currentChannelId: getCurrentChannelId(state),
-        joinTeamRequest: state.requests.teams.joinTeam
+        currentUserId: currentUser && currentUser.id,
+        currentUserIsGuest,
+        isLandscape: isLandscape(state),
+        serverVersion: state.entities.general.serverVersion,
+        teamsRequest: state.requests.teams.getTeams,
+        teams: getJoinableTeams(state),
+        theme: getTheme(state),
     };
 }
 
 function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
+            getTeams,
             handleTeamChange,
             joinTeam,
+            addUserToTeam,
             logout,
-            markChannelAsRead
-        }, dispatch)
+        }, dispatch),
     };
 }
 

@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
@@ -8,19 +8,22 @@ import {
     StyleSheet,
     ToastAndroid,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
-import RNFetchBlob from 'react-native-fetch-blob';
+import RNFetchBlob from 'rn-fetch-blob';
 import {intlShape} from 'react-intl';
 
-import {Client4} from 'mattermost-redux/client';
+import {Client4} from '@mm-redux/client';
 
+import {DeviceTypes} from 'app/constants/';
 import FormattedText from 'app/components/formatted_text';
+import {getLocalFilePathFromFile, isDocument, isVideo} from 'app/utils/file';
 import {emptyFunction} from 'app/utils/general';
 
+const {DOCUMENTS_PATH, VIDEOS_PATH} = DeviceTypes;
 const EXTERNAL_STORAGE_PERMISSION = 'android.permission.WRITE_EXTERNAL_STORAGE';
-const HEADER_HEIGHT = 64;
-const OPTION_LIST_WIDTH = 39;
+const HEADER_HEIGHT = 46;
+const OPTION_LIST_HEIGHT = 39;
 
 export default class Downloader extends PureComponent {
     static propTypes = {
@@ -28,18 +31,18 @@ export default class Downloader extends PureComponent {
         onDownloadCancel: PropTypes.func,
         onDownloadStart: PropTypes.func,
         onDownloadSuccess: PropTypes.func,
-        show: PropTypes.bool
+        show: PropTypes.bool,
     };
 
     static defaultProps = {
         onCancelPress: emptyFunction,
         onDownloadStart: emptyFunction,
         onDownloadSuccess: emptyFunction,
-        show: false
+        show: false,
     };
 
     static contextTypes = {
-        intl: intlShape
+        intl: intlShape,
     };
 
     checkForPermissions = async () => {
@@ -48,7 +51,7 @@ export default class Downloader extends PureComponent {
             const {intl} = this.context;
             const description = intl.formatMessage({
                 id: 'mobile.downloader.android_permission',
-                defaultMessage: 'We need access to the downloads folder to save files.'
+                defaultMessage: 'We need access to the downloads folder to save files.',
             });
 
             const permissionRequest = await PermissionsAndroid.request(EXTERNAL_STORAGE_PERMISSION, description);
@@ -61,6 +64,7 @@ export default class Downloader extends PureComponent {
     handleDownload = async () => {
         const {file, onDownloadCancel, onDownloadStart, onDownloadSuccess} = this.props;
         const {intl} = this.context;
+        const {data} = file;
 
         const canWriteToStorage = await this.checkForPermissions();
         if (!canWriteToStorage) {
@@ -71,45 +75,73 @@ export default class Downloader extends PureComponent {
         try {
             const started = intl.formatMessage({
                 id: 'mobile.downloader.android_started',
-                defaultMessage: 'Download started'
-            });
-            const title = intl.formatMessage({
-                id: 'mobile.downloader.android_success',
-                defaultMessage: 'download successful'
+                defaultMessage: 'Download started',
             });
             const complete = intl.formatMessage({
                 id: 'mobile.downloader.android_complete',
-                defaultMessage: 'Download complete'
+                defaultMessage: 'Download complete',
             });
 
             ToastAndroid.show(started, ToastAndroid.SHORT);
             onDownloadStart();
 
-            const imageUrl = Client4.getFileUrl(file.id);
+            let dest = `${RNFetchBlob.fs.dirs.DownloadDir}/${data.id}-${data.name}`;
+            let downloadFile = true;
 
-            const task = RNFetchBlob.config({
-                fileCache: true,
-                addAndroidDownloads: {
-                    useDownloadManager: true,
-                    notification: true,
-                    path: `${RNFetchBlob.fs.dirs.DownloadDir}/${file.name}`,
-                    title: `${file.name} ${title}`,
-                    mime: file.mime_type,
-                    description: file.name,
-                    mediaScannable: true
+            if (data.localPath) {
+                const exists = await RNFetchBlob.fs.exists(data.localPath);
+
+                if (exists) {
+                    downloadFile = false;
+                    await RNFetchBlob.fs.cp(data.localPath, dest);
                 }
-            }).fetch('GET', imageUrl, {
-                Authorization: `Bearer ${Client4.token}`
-            });
+            } else if (isVideo(data)) {
+                const path = getLocalFilePathFromFile(VIDEOS_PATH, file);
+                const exists = await RNFetchBlob.fs.exists(path);
 
-            await task;
+                if (exists) {
+                    downloadFile = false;
+                    dest = getLocalFilePathFromFile(RNFetchBlob.fs.dirs.DownloadDir, file);
+                    await RNFetchBlob.fs.cp(path, dest);
+                }
+            } else if (isDocument(data)) {
+                const path = getLocalFilePathFromFile(DOCUMENTS_PATH, file);
+                const exists = await RNFetchBlob.fs.exists(path);
+
+                if (exists) {
+                    downloadFile = false;
+                    await RNFetchBlob.fs.cp(path, dest);
+                }
+            }
+
+            if (downloadFile) {
+                const imageUrl = Client4.getFileUrl(data.id);
+
+                const task = RNFetchBlob.config({
+                    fileCache: true,
+                    addAndroidDownloads: {
+                        useDownloadManager: true,
+                        notification: true,
+                        path: dest,
+                        title: `${file.caption}`,
+                        mime: data.mime_type,
+                        description: data.name,
+                        mediaScannable: true,
+                    },
+                }).fetch('GET', imageUrl, {
+                    Authorization: `Bearer ${Client4.token}`,
+                    'X-Requested-With': 'XMLHttpRequest',
+                });
+
+                await task;
+            }
 
             ToastAndroid.show(complete, ToastAndroid.SHORT);
             onDownloadSuccess();
         } catch (error) {
             const failed = intl.formatMessage({
                 id: 'mobile.downloader.android_failed',
-                defaultMessage: 'Download failed'
+                defaultMessage: 'Download failed',
             });
 
             ToastAndroid.show(failed, ToastAndroid.SHORT);
@@ -120,8 +152,12 @@ export default class Downloader extends PureComponent {
     render() {
         const {show} = this.props;
 
+        if (!show) {
+            return null;
+        }
+
         return (
-            <View style={[styles.wrapper, {height: show ? OPTION_LIST_WIDTH : 0}]}>
+            <View style={styles.wrapper}>
                 <TouchableOpacity
                     style={styles.downloadButton}
                     onPress={this.handleDownload}
@@ -140,18 +176,20 @@ export default class Downloader extends PureComponent {
 const styles = StyleSheet.create({
     downloadButton: {
         flex: 1,
-        justifyContent: 'center'
+        justifyContent: 'center',
     },
     downloadButtonText: {
         color: 'white',
         fontSize: 15,
-        paddingLeft: 15
+        paddingLeft: 15,
     },
     wrapper: {
         position: 'absolute',
         backgroundColor: '#575757',
+        height: OPTION_LIST_HEIGHT,
         top: HEADER_HEIGHT,
         right: 0,
-        width: 150
-    }
+        width: 150,
+        marginRight: 5,
+    },
 });

@@ -1,13 +1,14 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
-import {makeGetFilesForPost} from 'mattermost-redux/selectors/entities/files';
+import {canDownloadFilesOnMobile} from '@mm-redux/selectors/entities/general';
+import {makeGetFilesForPost} from '@mm-redux/selectors/entities/files';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+
 import {loadFilesForPostIfNecessary} from 'app/actions/views/channel';
-import {addFileToFetchCache} from 'app/actions/views/file_preview';
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
 
 import FileAttachmentList from './file_attachment_list';
 
@@ -15,10 +16,9 @@ function makeMapStateToProps() {
     const getFilesForPost = makeGetFilesForPost();
     return function mapStateToProps(state, ownProps) {
         return {
-            fetchCache: state.views.fetchCache,
+            canDownloadFiles: canDownloadFilesOnMobile(state),
             files: getFilesForPost(state, ownProps.postId),
             theme: getTheme(state),
-            filesForPostRequest: state.requests.files.getFilesForPost
         };
     };
 }
@@ -26,9 +26,8 @@ function makeMapStateToProps() {
 function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
-            addFileToFetchCache,
-            loadFilesForPostIfNecessary
-        }, dispatch)
+            loadFilesForPostIfNecessary,
+        }, dispatch),
     };
 }
 

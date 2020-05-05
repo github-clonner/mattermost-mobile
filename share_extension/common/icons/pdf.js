@@ -1,12 +1,12 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React from 'react';
 import PropTypes from 'prop-types';
 import {View} from 'react-native';
 import Svg, {
     G,
-    Path
+    Path,
 } from 'react-native-svg';
 
 function PdfSvg({height, width}) {
@@ -47,7 +47,7 @@ function PdfSvg({height, width}) {
 
 PdfSvg.propTypes = {
     height: PropTypes.number.isRequired,
-    width: PropTypes.number.isRequired
+    width: PropTypes.number.isRequired,
 };
 
 export default PdfSvg;

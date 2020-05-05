@@ -1,8 +1,10 @@
 assets/override
 dist
+build-ios
 *.zip
 server.PID
 mattermost.keystore
+tmp/
 
 # OSX
 #
@@ -28,14 +30,19 @@ DerivedData
 *.apk
 *.xcuserstate
 project.xcworkspace
+ios/Pods
+.podinstall
 
 # Android/IntelliJ
 #
-build/
 .idea
 .gradle
 local.properties
 *.iml
+android/app/bin
+.settings
+.project
+.classpath
 
 # node.js
 #
@@ -67,10 +74,11 @@ tags
 # For more information about the recommended setup visit:
 # https://docs.fastlane.tools/best-practices/source-control/
 
-fastlane/report.xml
-fastlane/Preview.html
+*/fastlane/report.xml
+*/fastlane/Preview.html
 */fastlane/screenshots
-
+fastlane/.env
+fastlane/report.xml
 
 # Sentry
 android/sentry.properties
@@ -78,10 +86,11 @@ ios/sentry.properties
 
 # Testing
 .nyc_output
+coverage
+.tmp
 
-# Pods
-.podinstall
-ios/Pods/
+# Bundle artifact
+*.jsbundle
 
 #editor-settings
 .vscode

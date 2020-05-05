@@ -1,26 +1,37 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {connect} from 'react-redux';
 
-import {getPost} from 'mattermost-redux/selectors/entities/posts';
-import {isSystemMessage} from 'mattermost-redux/utils/post_utils';
+import {isSystemMessage} from '@mm-redux/utils/post_utils';
+import {Client4} from '@mm-redux/client';
 
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {getConfig} from '@mm-redux/selectors/entities/general';
+
+import {fromAutoResponder} from 'app/utils/general';
 
 import PostProfilePicture from './post_profile_picture';
 
+import {getUser} from '@mm-redux/selectors/entities/users';
+
 function mapStateToProps(state, ownProps) {
-    const {config} = state.entities.general;
-    const post = getPost(state, ownProps.postId);
+    const config = getConfig(state);
+    const post = ownProps.post;
+    const user = getUser(state, post.user_id);
+
+    const overrideIconUrl = Client4.getAbsoluteUrl(post?.props?.override_icon_url); // eslint-disable-line camelcase
 
     return {
-        enablePostIconOverride: config.EnablePostIconOverride === 'true',
-        fromWebHook: post.props && post.props.from_webhook === 'true',
+        enablePostIconOverride: config.EnablePostIconOverride === 'true' && post?.props?.use_user_icon !== 'true', // eslint-disable-line camelcase
+        fromWebHook: post?.props?.from_webhook === 'true', // eslint-disable-line camelcase
         isSystemMessage: isSystemMessage(post),
-        overrideIconUrl: post.props && post.props.override_icon_url,
+        fromAutoResponder: fromAutoResponder(post),
+        overrideIconUrl,
         userId: post.user_id,
-        theme: getTheme(state)
+        isBot: (user ? user.is_bot : false),
+        isEmoji: Boolean(post?.props?.override_icon_emoji), // eslint-disable-line camelcase
+        theme: getTheme(state),
     };
 }
 

@@ -1,9 +1,9 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {connect} from 'react-redux';
 
-import {RequestStatus} from 'mattermost-redux/constants';
+import {RequestStatus} from '@mm-redux/constants';
 import {getConnection} from 'app/selectors/device';
 
 import RetryBarIndicator from './retry_bar_indicator';
@@ -19,7 +19,7 @@ function mapStateToProps(state) {
     }
 
     return {
-        failed
+        failed,
     };
 }
 export default connect(mapStateToProps)(RetryBarIndicator);

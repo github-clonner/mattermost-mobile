@@ -1,15 +1,14 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {Dimensions} from 'react-native';
 
-import {UserTypes} from 'mattermost-redux/action_types';
-import {DeviceTypes} from 'app/constants';
+import {DeviceTypes} from '@constants';
 
 const {height, width} = Dimensions.get('window');
 const initialState = {
     deviceHeight: height,
-    deviceWidth: width
+    deviceWidth: width,
 };
 
 export default function dimension(state = initialState, action) {
@@ -21,8 +20,6 @@ export default function dimension(state = initialState, action) {
         }
         break;
     }
-    case UserTypes.LOGOUT_SUCCESS:
-        return initialState;
     }
 
     return state;

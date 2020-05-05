@@ -1,14 +1,30 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {Alert} from 'react-native';
+import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 
-export function alertErrorWithFallback(intl, error, fallback, values) {
+import {Posts} from '@mm-redux/constants';
+
+const INVALID_VERSIONS = ['1.29.0'];
+
+export function fromAutoResponder(post) {
+    return Boolean(post.type && (post.type === Posts.SYSTEM_AUTO_RESPONDER));
+}
+
+export function toTitleCase(str) {
+    function doTitleCase(txt) {
+        return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+    }
+    return str.replace(/\w\S*/g, doTitleCase);
+}
+
+export function alertErrorWithFallback(intl, error, fallback, values, buttons) {
     let msg = error.message;
     if (!msg || msg === 'Network request failed') {
         msg = intl.formatMessage(fallback, values);
     }
-    Alert.alert('', msg);
+    Alert.alert('', msg, buttons);
 }
 
 export function alertErrorIfInvalidPermissions(result) {
@@ -32,8 +48,15 @@ export function alertErrorIfInvalidPermissions(result) {
     }
 }
 
-export function emptyFunction() {
-    return;
+export function emptyFunction() { // eslint-disable-line no-empty-function
+
+}
+
+export function hapticFeedback(method = 'impactLight') {
+    ReactNativeHapticFeedback.trigger(method, {
+        enableVibrateFallback: false,
+        ignoreAndroidSystemSettings: false,
+    });
 }
 
 export function throttle(fn, limit, ...args) {
@@ -56,4 +79,16 @@ export function throttle(fn, limit, ...args) {
             inThrottle = true;
         }
     };
+}
+
+export function isPendingPost(postId, userId) {
+    return postId.startsWith(userId);
+}
+
+export function validatePreviousVersion(previousVersion) {
+    if (!previousVersion || INVALID_VERSIONS.includes(previousVersion)) {
+        return false;
+    }
+
+    return true;
 }

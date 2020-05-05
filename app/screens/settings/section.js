@@ -1,14 +1,15 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React from 'react';
 import PropTypes from 'prop-types';
 import {
-    View
+    View,
 } from 'react-native';
 
 import FormattedText from 'app/components/formatted_text';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
+import {marginHorizontal as margin} from 'app/components/safe_area_view/iphone_x_spacing';
 
 function section(props) {
     const {
@@ -21,7 +22,8 @@ function section(props) {
         headerDefaultMessage,
         headerId,
         headerValues,
-        theme
+        theme,
+        isLandscape,
     } = props;
 
     const style = getStyleSheet(theme);
@@ -33,7 +35,7 @@ function section(props) {
                     id={headerId}
                     defaultMessage={headerDefaultMessage}
                     values={headerValues}
-                    style={style.header}
+                    style={[style.header, margin(isLandscape)]}
                 />
             }
             <View style={style.items}>
@@ -44,7 +46,7 @@ function section(props) {
                     id={footerId}
                     defaultMessage={footerDefaultMessage}
                     values={footerValues}
-                    style={style.footer}
+                    style={[style.footer, margin(isLandscape)]}
                 />
             }
         </View>
@@ -61,33 +63,34 @@ section.propTypes = {
     headerDefaultMessage: PropTypes.string,
     headerId: PropTypes.string,
     headerValues: PropTypes.object,
-    theme: PropTypes.object.isRequired
+    theme: PropTypes.object.isRequired,
+    isLandscape: PropTypes.bool.isRequired,
 };
 
 const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
-            marginBottom: 30
+            marginBottom: 30,
         },
         header: {
             marginHorizontal: 15,
             marginBottom: 10,
             fontSize: 13,
-            color: changeOpacity(theme.centerChannelColor, 0.5)
+            color: changeOpacity(theme.centerChannelColor, 0.5),
         },
         items: {
             backgroundColor: theme.centerChannelBg,
             borderTopWidth: 1,
             borderBottomWidth: 1,
             borderTopColor: changeOpacity(theme.centerChannelColor, 0.1),
-            borderBottomColor: changeOpacity(theme.centerChannelColor, 0.1)
+            borderBottomColor: changeOpacity(theme.centerChannelColor, 0.1),
         },
         footer: {
-            marginHorizontal: 15,
             marginTop: 10,
+            marginHorizontal: 15,
             fontSize: 12,
-            color: changeOpacity(theme.centerChannelColor, 0.5)
-        }
+            color: changeOpacity(theme.centerChannelColor, 0.5),
+        },
     };
 });
 

@@ -1,62 +1,152 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
-    Image,
     InteractionManager,
     Platform,
     StyleSheet,
-    Text,
     TouchableOpacity,
-    View
+    Text,
+    View,
 } from 'react-native';
+import FastImage from 'react-native-fast-image';
+import {Navigation} from 'react-native-navigation';
+import * as Animatable from 'react-native-animatable';
+import {PanGestureHandler} from 'react-native-gesture-handler';
 
+import {Client4} from '@mm-redux/client';
+import {isDirectChannel} from '@mm-redux/utils/channel_utils';
+import EventEmitter from '@mm-redux/utils/event_emitter';
+import {displayUsername} from '@mm-redux/utils/user_utils';
+
+import {popToRoot, dismissAllModals, dismissOverlay} from 'app/actions/navigation';
 import FormattedText from 'app/components/formatted_text';
 import ProfilePicture from 'app/components/profile_picture';
+import {NavigationTypes} from 'app/constants';
 import {changeOpacity} from 'app/utils/theme';
-
-import {isDirectChannel} from 'mattermost-redux/utils/channel_utils';
-import EventEmitter from 'mattermost-redux/utils/event_emitter';
-import {displayUsername} from 'mattermost-redux/utils/user_utils';
 
 import logo from 'assets/images/icon.png';
 import webhookIcon from 'assets/images/icons/webhook.jpg';
 
 const IMAGE_SIZE = 33;
+const AUTO_DISMISS_TIME_MILLIS = 5000;
 
 export default class Notification extends PureComponent {
     static propTypes = {
         actions: PropTypes.shape({
-            loadFromPushNotification: PropTypes.func.isRequired
+            loadFromPushNotification: PropTypes.func.isRequired,
         }).isRequired,
+        componentId: PropTypes.string.isRequired,
         channel: PropTypes.object,
         config: PropTypes.object,
-        deviceWidth: PropTypes.number.isRequired,
         notification: PropTypes.object.isRequired,
         teammateNameDisplay: PropTypes.string,
-        navigator: PropTypes.object,
-        theme: PropTypes.object.isRequired,
-        user: PropTypes.object
+        user: PropTypes.object,
     };
 
-    notificationTapped = () => {
-        const {actions, navigator, notification} = this.props;
+    state = {
+        keyFrames: {
+            from: {
+                translateY: -100,
+            },
+            to: {
+                translateY: 0,
+            },
+        },
+    }
 
-        EventEmitter.emit('close_channel_drawer');
+    tapped = false;
+
+    componentDidMount() {
+        this.setDismissTimer();
+        this.setDidDisappearListener();
+        this.setShowOverlayListener();
+    }
+
+    componentWillUnmount() {
+        this.clearDismissTimer();
+        this.clearDidDisappearListener();
+        this.clearShowOverlayListener();
+    }
+
+    setDismissTimer = () => {
+        this.dismissTimer = setTimeout(() => {
+            if (!this.tapped) {
+                this.animateDismissOverlay();
+            }
+        }, AUTO_DISMISS_TIME_MILLIS);
+    }
+
+    clearDismissTimer = () => {
+        if (this.dismissTimer) {
+            clearTimeout(this.dismissTimer);
+            this.dismissTimer = null;
+        }
+    }
+
+    setDidDisappearListener = () => {
+        this.didDismissListener = Navigation.events().registerComponentDidDisappearListener(async ({componentId}) => {
+            if (componentId === this.props.componentId && this.tapped) {
+                await dismissAllModals();
+                await popToRoot();
+            }
+        });
+    }
+
+    clearDidDisappearListener = () => {
+        this.didDismissListener.remove();
+    }
+
+    setShowOverlayListener = () => {
+        EventEmitter.on(NavigationTypes.NAVIGATION_SHOW_OVERLAY, this.onNewOverlay);
+    }
+
+    clearShowOverlayListener = () => {
+        EventEmitter.off(NavigationTypes.NAVIGATION_SHOW_OVERLAY, this.onNewOverlay);
+    }
+
+    onNewOverlay = () => {
+        // Dismiss this overlay so that there is only ever one.
+        this.dismissOverlay();
+    }
+
+    dismissOverlay = () => {
+        this.clearDismissTimer();
+
+        const {componentId} = this.props;
+        dismissOverlay(componentId);
+    }
+
+    animateDismissOverlay = () => {
+        this.clearDismissTimer();
+
+        this.setState({
+            keyFrames: {
+                from: {
+                    translateY: 0,
+                },
+                to: {
+                    translateY: -100,
+                },
+            },
+        });
+        setTimeout(() => this.dismissOverlay(), 1000);
+    }
+
+    notificationTapped = () => {
+        this.tapped = true;
+        this.clearDismissTimer();
+
+        const {actions, notification} = this.props;
+
+        EventEmitter.emit(NavigationTypes.CLOSE_MAIN_SIDEABR);
+        EventEmitter.emit(NavigationTypes.CLOSE_SETTINGS_SIDEBAR);
+        this.dismissOverlay();
         InteractionManager.runAfterInteractions(() => {
-            navigator.dismissInAppNotification();
             if (!notification.localNotification) {
                 actions.loadFromPushNotification(notification);
-
-                if (Platform.OS === 'android') {
-                    navigator.dismissModal({animation: 'none'});
-                }
-
-                navigator.popToRoot({
-                    animated: false
-                });
             }
         });
     };
@@ -66,16 +156,17 @@ export default class Notification extends PureComponent {
         const {data} = notification;
 
         let icon = (
-            <Image
+            <FastImage
                 source={logo}
                 style={style.icon}
             />
         );
 
-        if (data.from_webhook && config.EnablePostIconOverride === 'true') {
-            const wsIcon = data.override_icon_url ? {uri: data.override_icon_url} : webhookIcon;
+        if (data.from_webhook && config.EnablePostIconOverride === 'true' && data.use_user_icon !== 'true') {
+            const overrideIconURL = Client4.getAbsoluteUrl(data.override_icon_url); // eslint-disable-line camelcase
+            const wsIcon = data.override_icon_url ? {uri: overrideIconURL} : webhookIcon;
             icon = (
-                <Image
+                <FastImage
                     source={wsIcon}
                     style={style.icon}
                 />
@@ -92,8 +183,28 @@ export default class Notification extends PureComponent {
         return icon;
     };
 
-    getNotificationTitle = (titleText) => {
+    getNotificationTitle = (notification) => {
         const {channel} = this.props;
+        const {message, data} = notification;
+
+        if (data.version === 'v2') {
+            if (data.channel_name) {
+                return (
+                    <Text
+                        numberOfLines={1}
+                        ellipsizeMode='tail'
+                        style={style.title}
+                    >
+                        {data.channel_name}
+                    </Text>
+                );
+            }
+
+            return null;
+        }
+
+        const msg = message.split(':');
+        const titleText = msg.shift();
 
         let title = (
             <Text
@@ -164,40 +275,59 @@ export default class Notification extends PureComponent {
     };
 
     render() {
-        const {deviceWidth, notification} = this.props;
-        const {message} = notification;
+        const {notification} = this.props;
+        const {data, message} = notification;
 
         if (message) {
-            const msg = message.split(':');
-            const titleText = msg.shift();
-            const messageText = msg.join('').trim();
+            let messageText;
+            if (data.version !== 'v2') {
+                const msg = message.split(':');
+                messageText = msg.join('').trim();
+            } else if (Platform.OS === 'ios') {
+                messageText = message.body || message;
+            } else {
+                messageText = message;
+            }
 
-            const title = this.getNotificationTitle(titleText);
+            const title = this.getNotificationTitle(notification);
             const icon = this.getNotificationIcon();
 
             return (
-                <View style={[style.container, {width: deviceWidth}]}>
-                    <TouchableOpacity
-                        style={{flex: 1, flexDirection: 'row'}}
-                        onPress={this.notificationTapped}
+                <PanGestureHandler
+                    onGestureEvent={this.animateDismissOverlay}
+                    minOffsetY={-20}
+                >
+                    <Animatable.View
+                        duration={250}
+                        style={style.container}
+                        useNativeDriver={true}
+                        animation={this.state.keyFrames}
                     >
-                        <View style={style.iconContainer}>
-                            {icon}
+                        <View style={{flex: 1}}>
+                            <TouchableOpacity
+                                style={{flex: 1, flexDirection: 'row'}}
+                                onPress={this.notificationTapped}
+                                activeOpacity={1}
+                            >
+                                <View style={style.iconContainer}>
+                                    {icon}
+                                </View>
+                                <View style={style.textContainer}>
+                                    {title}
+                                    <View style={{flex: 1}}>
+                                        <Text
+                                            numberOfLines={1}
+                                            ellipsizeMode='tail'
+                                            style={style.message}
+                                        >
+                                            {messageText}
+                                        </Text>
+                                    </View>
+                                </View>
+                            </TouchableOpacity>
                         </View>
-                        <View style={style.textContainer}>
-                            {title}
-                            <View style={{flex: 1}}>
-                                <Text
-                                    numberOfLines={1}
-                                    ellipsizeMode='tail'
-                                    style={style.message}
-                                >
-                                    {messageText}
-                                </Text>
-                            </View>
-                        </View>
-                    </TouchableOpacity>
-                </View>
+                    </Animatable.View>
+                </PanGestureHandler>
             );
         }
 
@@ -208,33 +338,34 @@ export default class Notification extends PureComponent {
 const style = StyleSheet.create({
     container: {
         alignItems: 'flex-start',
-        backgroundColor: changeOpacity('#000', 0.9),
+        backgroundColor: changeOpacity('#000', 1),
         flexDirection: 'row',
         justifyContent: 'flex-start',
         paddingHorizontal: 10,
+        width: '100%',
         ...Platform.select({
             android: {
-                height: 68
+                height: 68,
             },
             ios: {
-                height: 88
-            }
-        })
+                height: 88,
+            },
+        }),
     },
     iconContainer: {
         ...Platform.select({
             android: {
-                paddingTop: 17
+                paddingTop: 17,
             },
             ios: {
-                paddingTop: 37
-            }
-        })
+                paddingTop: 37,
+            },
+        }),
     },
     icon: {
         borderRadius: (IMAGE_SIZE / 2),
         height: IMAGE_SIZE,
-        width: IMAGE_SIZE
+        width: IMAGE_SIZE,
     },
     textContainer: {
         flex: 1,
@@ -245,25 +376,25 @@ const style = StyleSheet.create({
         ...Platform.select({
             android: {
                 marginTop: 17,
-                height: 50
+                height: 50,
             },
             ios: {
-                paddingTop: 37
-            }
-        })
+                paddingTop: 37,
+            },
+        }),
     },
     title: {
         color: '#FFFFFF',
         fontSize: 14,
-        fontWeight: '600'
+        fontWeight: '600',
     },
     channelName: {
         alignSelf: 'stretch',
         alignItems: 'flex-start',
-        flex: 1
+        flex: 1,
     },
     message: {
         color: '#FFFFFF',
-        fontSize: 14
-    }
+        fontSize: 14,
+    },
 });

@@ -1,60 +1,71 @@
-// Copyright (c) 2018-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import {Provider} from 'react-redux';
 import {IntlProvider} from 'react-intl';
 
-import {Client4} from 'mattermost-redux/client';
-
-import {getTranslations} from 'app/i18n';
-import initialState from 'app/initial_state';
-import {getCurrentLocale} from 'app/selectors/i18n';
-import configureStore from 'app/store';
+import {getTranslations} from '@i18n';
+import {getCurrentLocale} from '@selectors/i18n';
+import configureStore from '@store';
+import getStorage from '@store/mmkv_adapter';
+import Store from '@store/store';
+import {waitForHydration} from '@store/utils';
 
 import {extensionSelectTeamId} from './actions';
-import Navigation from './navigation';
+let Extension;
 
 export default class ShareApp extends PureComponent {
     constructor() {
         super();
 
-        this.store = configureStore(initialState);
-        this.unsubscribeFromStore = this.store.subscribe(this.listenForHydration);
+        if (!Extension) {
+            Extension = require('./extension').default;
+        }
+
         this.state = {init: false};
     }
 
-    listenForHydration = () => {
-        const {dispatch, getState} = this.store;
-        const state = getState();
-        if (state.views.root.hydrationComplete) {
-            const {credentials} = state.entities.general;
-            const {currentTeamId} = state.entities.teams;
+    componentDidMount() {
+        this.mounted = true;
+        this.initialize();
+    }
 
-            this.unsubscribeFromStore();
-            if (credentials.token && credentials.url) {
-                Client4.setToken(credentials.token);
-                Client4.setUrl(credentials.url);
-            }
-            extensionSelectTeamId(currentTeamId)(dispatch, getState);
-            this.setState({init: true});
+    initialize = async () => {
+        if (Store.redux) {
+            this.hydrate();
+            return;
         }
+
+        getStorage().then(this.hydrate);
     };
+
+    hydrate = (MMKVStorage) => {
+        if (MMKVStorage) {
+            configureStore(MMKVStorage);
+        }
+        waitForHydration(Store.redux, () => {
+            const {dispatch, getState} = Store.redux;
+            const {currentTeamId} = getState().entities.teams;
+            dispatch(extensionSelectTeamId(currentTeamId));
+            this.setState({init: true});
+        });
+    }
 
     render() {
         if (!this.state.init) {
             return null;
         }
 
-        const locale = getCurrentLocale(this.store.getState());
+        const locale = getCurrentLocale(Store.redux.getState());
 
         return (
-            <Provider store={this.store}>
+            <Provider store={Store.redux}>
                 <IntlProvider
                     locale={locale}
                     messages={getTranslations(locale)}
                 >
-                    <Navigation/>
+                    <Extension/>
                 </IntlProvider>
             </Provider>
         );

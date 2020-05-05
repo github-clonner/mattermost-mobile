@@ -1,0 +1,288 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`MarkdownTable should match snapshot 1`] = `
+<TouchableWithFeedbackIOS
+  onPress={[Function]}
+  style={
+    Object {
+      "paddingRight": 10,
+    }
+  }
+  type="opacity"
+>
+  <ScrollView
+    onContentSizeChange={[Function]}
+    onLayout={[Function]}
+    scrollEnabled={false}
+    showsVerticalScrollIndicator={false}
+    style={
+      Object {
+        "maxHeight": 300,
+      }
+    }
+  >
+    <View
+      style={
+        Array [
+          Object {
+            "borderColor": "rgba(61,60,64,0.2)",
+            "borderWidth": 1,
+            "width": "100%",
+          },
+          Object {
+            "width": 672,
+          },
+        ]
+      }
+    >
+      <
+        className="row"
+        isFirstRow={true}
+      >
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+      </>
+      <
+        className="row"
+      >
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+      </>
+      <
+        className="row"
+      >
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+      </>
+      <
+        className="row"
+      >
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+      </>
+      <
+        className="row"
+      >
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+      </>
+      <
+        className="row"
+      >
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+      </>
+      <
+        className="row"
+        isLastRow={true}
+      >
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+        <
+          className="col"
+        />
+      </>
+    </View>
+  </ScrollView>
+  <LinearGradient
+    colors={
+      Array [
+        "rgba(61,60,64,0)",
+        "rgba(61,60,64,0.1)",
+      ]
+    }
+    end={
+      Object {
+        "x": 1,
+        "y": 0,
+      }
+    }
+    start={
+      Object {
+        "x": 0,
+        "y": 0,
+      }
+    }
+    style={
+      Array [
+        Object {
+          "borderColor": "rgba(61,60,64,0.2)",
+          "borderRightWidth": 1,
+          "maxHeight": 300,
+          "position": "absolute",
+          "top": 0,
+          "width": 20,
+        },
+        Object {
+          "height": 0,
+          "left": -20,
+        },
+      ]
+    }
+  />
+  <LinearGradient
+    colors={
+      Array [
+        "rgba(61,60,64,0)",
+        "rgba(61,60,64,0.1)",
+      ]
+    }
+    end={
+      Object {
+        "x": 0.5,
+        "y": 1,
+      }
+    }
+    start={
+      Object {
+        "x": 0.5,
+        "y": 0,
+      }
+    }
+    style={
+      Array [
+        Object {
+          "borderColor": "rgba(61,60,64,0.2)",
+          "bottom": 34,
+          "height": 20,
+          "left": 0,
+          "position": "absolute",
+        },
+        Object {
+          "width": 0,
+        },
+      ]
+    }
+  />
+</TouchableWithFeedbackIOS>
+`;

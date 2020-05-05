@@ -1,36 +1,37 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
-    View,
-    ScrollView,
-    ViewPagerAndroid,
+    Dimensions,
+    InteractionManager,
     Platform,
-    StyleSheet, InteractionManager
+    ScrollView,
+    StyleSheet,
+    View,
 } from 'react-native';
+
+import {DeviceTypes, ViewTypes} from 'app/constants';
+import mattermostManaged from 'app/mattermost_managed';
 
 export default class Swiper extends PureComponent {
     static propTypes = {
         activeDotColor: PropTypes.string,
         children: PropTypes.node.isRequired,
         dotColor: PropTypes.string,
+        paginationBackgroundColor: PropTypes.string,
         initialPage: PropTypes.number,
         keyboardShouldPersistTaps: PropTypes.string,
         onIndexChanged: PropTypes.func,
-        paginationStyle: PropTypes.oneOfType([
-            PropTypes.object,
-            PropTypes.number
-        ]),
         scrollEnabled: PropTypes.bool,
         showsPagination: PropTypes.bool,
         style: PropTypes.oneOfType([
             PropTypes.object,
-            PropTypes.number
+            PropTypes.number,
         ]),
         width: PropTypes.number,
-        onScrollBegin: PropTypes.func
+        onScrollBegin: PropTypes.func,
     };
 
     static defaultProps = {
@@ -39,7 +40,7 @@ export default class Swiper extends PureComponent {
         onIndexChanged: () => null,
         scrollEnabled: true,
         showsPagination: true,
-        onScrollBegin: () => true
+        onScrollBegin: () => true,
     };
 
     constructor(props) {
@@ -47,9 +48,16 @@ export default class Swiper extends PureComponent {
 
         this.runOnLayout = true;
         this.offset = props.width * props.initialPage;
-        this.isScrolling = false;
 
         this.state = this.initialState(props);
+    }
+
+    static getDerivedStateFromProps(props, state) {
+        const total = React.Children.count(props.children);
+        if (total !== state.total) {
+            return {total};
+        }
+        return null;
     }
 
     componentDidUpdate(prevProps, prevState) {
@@ -57,36 +65,25 @@ export default class Swiper extends PureComponent {
         if (this.state.index !== prevState.index) {
             this.props.onIndexChanged(this.state.index);
         }
+
+        if (this.props.width !== prevProps.width) {
+            this.scrollByWidth(this.props.width);
+        }
     }
 
     initialState = (props) => {
         const index = props.initialPage;
-
         return {
             index,
-            total: React.Children.count(props.children)
+            total: React.Children.count(props.children),
         };
     };
 
     onLayout = (e) => {
-        this.offset = e.nativeEvent.layout.width * this.state.index;
-
-        if (this.runOnLayout) {
-            if (Platform.OS === 'ios') {
-                setTimeout(() => {
-                    if (this.scrollView) {
-                        this.scrollView.scrollTo({x: this.props.width * this.state.index, animated: false});
-                    }
-                }, 100);
-            } else if (this.scrollView) {
-                this.scrollView.setPageWithoutAnimation(this.state.index);
-            }
-            this.runOnLayout = false;
-        }
+        this.scrollByWidth(e.nativeEvent.layout.width);
     };
 
     onScrollBegin = () => {
-        this.isScrolling = true;
         this.props.onScrollBegin();
     };
 
@@ -96,30 +93,32 @@ export default class Swiper extends PureComponent {
             e.nativeEvent.contentOffset = {x: e.nativeEvent.position * this.props.width};
         }
 
-        this.isScrolling = false;
-
         // get the index
         this.updateIndex(e.nativeEvent.contentOffset.x);
     };
 
-    onPageScrollStateChanged = (e) => {
-        switch (e) {
-        case 'idle':
-            this.isScrolling = false;
-            break;
-        case 'dragging':
-            this.isScrolling = true;
-            this.props.onScrollBegin();
-            break;
-        }
+    scrollByWidth = (width) => {
+        this.offset = width * this.state.index;
+
+        setTimeout(() => {
+            if (this.scrollView) {
+                this.scrollView.scrollTo({x: width * this.state.index, animated: false});
+            }
+        }, 0);
     };
 
     scrollToStart = () => {
-        if (Platform.OS === 'ios') {
-            InteractionManager.runAfterInteractions(() => {
-                this.scrollView.scrollTo({x: 0, animated: false});
-            });
-        }
+        InteractionManager.runAfterInteractions(() => {
+            this.scrollView.scrollTo({x: 0, animated: false});
+        });
+    };
+
+    scrollToInitial = () => {
+        setTimeout(() => {
+            if (this.scrollView) {
+                this.scrollView.scrollTo({x: this.props.width * this.props.initialPage, animated: false});
+            }
+        }, 0);
     };
 
     refScrollView = (view) => {
@@ -129,47 +128,32 @@ export default class Swiper extends PureComponent {
     renderScrollView = (pages) => {
         const {
             keyboardShouldPersistTaps,
-            scrollEnabled
+            scrollEnabled,
         } = this.props;
 
-        if (Platform.OS === 'ios') {
-            return (
-                <ScrollView
-                    ref={this.refScrollView}
-                    bounces={false}
-                    horizontal={true}
-                    removeClippedSubviews={true}
-                    automaticallyAdjustContentInsets={true}
-                    showsHorizontalScrollIndicator={false}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={[styles.wrapperIOS, this.props.style]}
-                    onScrollBeginDrag={this.onScrollBegin}
-                    onMomentumScrollEnd={this.onScrollEnd}
-                    pagingEnabled={true}
-                    keyboardShouldPersistTaps={keyboardShouldPersistTaps}
-                    scrollEnabled={scrollEnabled}
-                >
-                    {pages}
-                </ScrollView>
-            );
-        }
         return (
-            <ViewPagerAndroid
+            <ScrollView
                 ref={this.refScrollView}
-                initialPage={this.props.initialPage}
-                onPageSelected={this.onScrollEnd}
-                onPageScrollStateChanged={this.onPageScrollStateChanged}
+                bounces={false}
+                horizontal={true}
+                removeClippedSubviews={true}
+                automaticallyAdjustContentInsets={true}
+                showsHorizontalScrollIndicator={false}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={[styles.wrapper, this.props.style]}
+                onScrollBeginDrag={this.onScrollBegin}
+                onMomentumScrollEnd={this.onScrollEnd}
+                pagingEnabled={scrollEnabled}
+                keyboardShouldPersistTaps={keyboardShouldPersistTaps}
                 scrollEnabled={scrollEnabled}
-                key={pages.length}
-                style={[styles.wrapperAndroid, this.props.style]}
             >
                 {pages}
-            </ViewPagerAndroid>
+            </ScrollView>
         );
     };
 
     renderPagination = () => {
-        if (this.state.total <= 1 || !this.props.showsPagination) {
+        if (this.state.total <= 1 || !this.props.showsPagination || Platform.OS === 'android') {
             return null;
         }
 
@@ -178,7 +162,7 @@ export default class Swiper extends PureComponent {
             <View
                 style={[
                     styles.dotStyle,
-                    {backgroundColor: this.props.activeDotColor || '#007aff'}
+                    {backgroundColor: this.props.activeDotColor || '#007aff'},
                 ]}
             />
         );
@@ -186,7 +170,7 @@ export default class Swiper extends PureComponent {
             <View
                 style={[
                     styles.dotStyle,
-                    {backgroundColor: this.props.dotColor || 'rgba(0,0,0,.2)'}
+                    {backgroundColor: this.props.dotColor || 'rgba(0,0,0,.2)'},
                 ]}
             />
         );
@@ -198,37 +182,41 @@ export default class Swiper extends PureComponent {
             }
         }
 
+        const {width, height} = Dimensions.get('window');
+        const bottom = this.paginationBottom(width, height);
+        const drawerWidth = (width > height) ? width - ViewTypes.IOS_HORIZONTAL_LANDSCAPE : width;
+        let style;
+        if (DeviceTypes.IS_IPHONE_WITH_INSETS && (width < height)) {
+            style = {
+                bottom,
+                width: drawerWidth,
+            };
+        } else {
+            style = {
+                bottom,
+                flex: 1,
+            };
+        }
+
         return (
             <View
                 pointerEvents='none'
-                style={[styles.pagination, this.props.paginationStyle]}
+                style={[styles.pagination, style]}
             >
-                {dots}
+                <View style={[styles.paginationWrapper, {backgroundColor: this.props.paginationBackgroundColor}]}>
+                    {dots}
+                </View>
             </View>
         );
     };
 
     scrollToIndex = (index, animated) => {
-        if (this.isScrolling || this.state.total < 2) {
+        if (this.state.total < 2) {
             return;
         }
 
-        if (Platform.OS === 'ios') {
-            this.scrollView.scrollTo({x: (index * this.props.width), animated});
-        } else {
-            this.scrollView[animated ? 'setPage' : 'setPageWithoutAnimation'](index);
-        }
-
-        // trigger onScrollEnd manually in android or if not animated
-        if (!animated || Platform.OS === 'android') {
-            setImmediate(() => {
-                this.onScrollEnd({
-                    nativeEvent: {
-                        position: index
-                    }
-                });
-            });
-        }
+        this.scrollView.scrollTo({x: (index * this.props.width), animated});
+        this.updateIndex(this.props.width * index);
     };
 
     updateIndex = (offset) => {
@@ -243,10 +231,27 @@ export default class Swiper extends PureComponent {
         this.setState({index});
     };
 
+    paginationBottom = (width, height) => {
+        if (DeviceTypes.IS_TABLET) {
+            if (Platform.OS === 'ios' && mattermostManaged.hasSafeAreaInsets) {
+                return 34;
+            }
+
+            return 24;
+        }
+
+        const landscape = width > height;
+        if (DeviceTypes.IS_IPHONE_WITH_INSETS) {
+            return landscape ? 14 : 34;
+        }
+
+        return 24;
+    };
+
     render() {
         const {
             children,
-            width
+            width,
         } = this.props;
 
         const pages = React.Children.map(children, (page, i) => {
@@ -277,29 +282,30 @@ const styles = StyleSheet.create({
     container: {
         backgroundColor: 'transparent',
         position: 'relative',
-        flex: 1
+        flex: 1,
     },
-    wrapperIOS: {
-        backgroundColor: 'transparent'
-    },
-    wrapperAndroid: {
+    wrapper: {
         backgroundColor: 'transparent',
-        flex: 1
     },
     slide: {
-        backgroundColor: 'transparent'
+        flex: 1,
+        width: '100%',
     },
     pagination: {
         position: 'absolute',
-        bottom: 25,
         left: 0,
         right: 0,
-        flexDirection: 'row',
-        flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'transparent',
-        marginBottom: 13
+        width: '100%',
+    },
+    paginationWrapper: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: 24,
+        borderRadius: 15,
+        width: 44,
     },
     dotStyle: {
         width: 8,
@@ -308,6 +314,6 @@ const styles = StyleSheet.create({
         marginLeft: 4,
         marginRight: 4,
         marginTop: 3,
-        marginBottom: 3
-    }
+        marginBottom: 3,
+    },
 });

@@ -1,17 +1,18 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React from 'react';
 import {injectIntl} from 'react-intl';
 import {
     ScrollView,
-    View
+    View,
 } from 'react-native';
-
+import SafeAreaView from 'app/components/safe_area_view';
 import FormattedText from 'app/components/formatted_text';
 import StatusBar from 'app/components/status_bar';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
-
+import {t} from 'app/utils/i18n';
+import {paddingHorizontal as padding} from 'app/components/safe_area_view/iphone_x_spacing';
 import Section from 'app/screens/settings/section';
 import SectionItem from 'app/screens/settings/section_item';
 
@@ -19,14 +20,15 @@ import NotificationSettingsMobileBase from './notification_settings_mobile_base'
 
 class NotificationSettingsMobileIos extends NotificationSettingsMobileBase {
     renderMobilePushSection(style) {
-        const {config, theme} = this.props;
+        const {config, theme, isLandscape} = this.props;
 
         const pushNotificationsEnabled = config.SendPushNotifications === 'true';
         return (
             <Section
-                headerId='mobile.notification_settings_mobile.push_activity'
+                headerId={t('mobile.notification_settings_mobile.push_activity')}
                 headerDefaultMessage='SEND NOTIFICATIONS'
                 theme={theme}
+                isLandscape={isLandscape}
             >
                 {pushNotificationsEnabled &&
                 <View>
@@ -42,6 +44,7 @@ class NotificationSettingsMobileIos extends NotificationSettingsMobileBase {
                         actionValue='all'
                         selected={this.state.push === 'all'}
                         theme={theme}
+                        isLandscape={isLandscape}
                     />
                     <View style={style.separator}/>
                     <SectionItem
@@ -56,6 +59,7 @@ class NotificationSettingsMobileIos extends NotificationSettingsMobileBase {
                         actionValue='mention'
                         selected={this.state.push === 'mention'}
                         theme={theme}
+                        isLandscape={isLandscape}
                     />
                     <View style={style.separator}/>
                     <SectionItem
@@ -70,6 +74,7 @@ class NotificationSettingsMobileIos extends NotificationSettingsMobileBase {
                         actionValue='none'
                         selected={this.state.push === 'none'}
                         theme={theme}
+                        isLandscape={isLandscape}
                     />
                 </View>
                 }
@@ -77,7 +82,7 @@ class NotificationSettingsMobileIos extends NotificationSettingsMobileBase {
                 <FormattedText
                     id='user.settings.push_notification.disabled_long'
                     defaultMessage='Push notifications for mobile devices have been disabled by your System Administrator.'
-                    style={style.disabled}
+                    style={[style.disabled, padding(isLandscape)]}
                 />
                 }
             </Section>
@@ -85,7 +90,7 @@ class NotificationSettingsMobileIos extends NotificationSettingsMobileBase {
     }
 
     renderMobilePushStatusSection(style) {
-        const {config, theme} = this.props;
+        const {config, theme, isLandscape} = this.props;
 
         const showSection = config.SendPushNotifications === 'true' && this.state.push !== 'none';
         if (!showSection) {
@@ -94,9 +99,10 @@ class NotificationSettingsMobileIos extends NotificationSettingsMobileBase {
 
         return (
             <Section
-                headerId='mobile.notification_settings_mobile.push_status'
+                headerId={t('mobile.notification_settings_mobile.push_status')}
                 headerDefaultMessage='TRIGGER PUSH NOTIFICATIONS WHEN'
                 theme={theme}
+                isLandscape={isLandscape}
             >
                 <SectionItem
                     label={(
@@ -110,6 +116,7 @@ class NotificationSettingsMobileIos extends NotificationSettingsMobileBase {
                     actionValue='online'
                     selected={this.state.push_status === 'online'}
                     theme={theme}
+                    isLandscape={isLandscape}
                 />
                 <View style={style.separator}/>
                 <SectionItem
@@ -124,6 +131,7 @@ class NotificationSettingsMobileIos extends NotificationSettingsMobileBase {
                     actionValue='away'
                     selected={this.state.push_status === 'away'}
                     theme={theme}
+                    isLandscape={isLandscape}
                 />
                 <View style={style.separator}/>
                 <SectionItem
@@ -138,6 +146,7 @@ class NotificationSettingsMobileIos extends NotificationSettingsMobileBase {
                     actionValue='offline'
                     selected={this.state.push_status === 'offline'}
                     theme={theme}
+                    isLandscape={isLandscape}
                 />
             </Section>
         );
@@ -148,17 +157,22 @@ class NotificationSettingsMobileIos extends NotificationSettingsMobileBase {
         const style = getStyleSheet(theme);
 
         return (
-            <View style={style.container}>
-                <StatusBar/>
-                <ScrollView
-                    style={style.scrollView}
-                    contentContainerStyle={style.scrollViewContent}
-                    alwaysBounceVertical={false}
-                >
-                    {this.renderMobilePushSection(style)}
-                    {this.renderMobilePushStatusSection(style)}
-                </ScrollView>
-            </View>
+            <SafeAreaView
+                excludeHeader={true}
+                excludeFooter={true}
+            >
+                <View style={style.container}>
+                    <StatusBar/>
+                    <ScrollView
+                        style={style.scrollView}
+                        contentContainerStyle={style.scrollViewContent}
+                        alwaysBounceVertical={false}
+                    >
+                        {this.renderMobilePushSection(style)}
+                        {this.renderMobilePushStatusSection(style)}
+                    </ScrollView>
+                </View>
+            </SafeAreaView>
         );
     }
 }
@@ -167,32 +181,32 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
             flex: 1,
-            backgroundColor: theme.centerChannelBg
+            backgroundColor: theme.centerChannelBg,
         },
         input: {
             color: theme.centerChannelColor,
             fontSize: 12,
-            height: 40
+            height: 40,
         },
         separator: {
             backgroundColor: changeOpacity(theme.centerChannelColor, 0.1),
             flex: 1,
             height: 1,
-            marginLeft: 15
+            marginLeft: 15,
         },
         scrollView: {
             flex: 1,
-            backgroundColor: changeOpacity(theme.centerChannelColor, 0.06)
+            backgroundColor: changeOpacity(theme.centerChannelColor, 0.06),
         },
         scrollViewContent: {
-            paddingVertical: 35
+            paddingVertical: 30,
         },
         disabled: {
             color: theme.centerChannelColor,
             fontSize: 15,
             paddingHorizontal: 15,
-            paddingVertical: 10
-        }
+            paddingVertical: 10,
+        },
     };
 });
 

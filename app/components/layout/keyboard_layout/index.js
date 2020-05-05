@@ -1,19 +1,16 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {connect} from 'react-redux';
 
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
-
-import {getStatusBarHeight} from 'app/selectors/device';
+import {isLandscape} from 'app/selectors/device';
 
 import KeyboardLayout from './keyboard_layout';
 
 function mapStateToProps(state) {
     return {
-        statusBarHeight: getStatusBarHeight(state),
-        theme: getTheme(state)
+        isLandscape: isLandscape(state),
     };
 }
 
-export default connect(mapStateToProps)(KeyboardLayout);
+export default connect(mapStateToProps, null, null, {forwardRef: true})(KeyboardLayout);

@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 export function getNotificationProps(user) {
     if (user && user.notify_props) {
@@ -14,7 +14,7 @@ export function getNotificationProps(user) {
         email: 'true',
         mention_keys: user ? `${user.username},@${user.username}` : '',
         push: 'mention',
-        push_status: 'online'
+        push_status: 'online',
     };
 
     if (!user || !user.first_name) {

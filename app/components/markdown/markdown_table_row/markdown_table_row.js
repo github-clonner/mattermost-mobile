@@ -1,5 +1,5 @@
-// Copyright (c) 2018-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import PropTypes from 'prop-types';
 import React from 'react';
@@ -11,7 +11,8 @@ export default class MarkdownTableRow extends React.PureComponent {
     static propTypes = {
         children: PropTypes.node,
         isLastRow: PropTypes.bool,
-        theme: PropTypes.object.isRequired
+        isFirstRow: PropTypes.bool,
+        theme: PropTypes.object.isRequired,
     };
 
     render() {
@@ -22,7 +23,18 @@ export default class MarkdownTableRow extends React.PureComponent {
             rowStyle.push(style.rowBottomBorder);
         }
 
-        return <View style={rowStyle}>{this.props.children}</View>;
+        if (this.props.isFirstRow) {
+            rowStyle.push(style.rowTopBackground);
+        }
+
+        // Add an extra prop to the last cell so that it knows not to render a right border since the container
+        // will handle that
+        const children = React.Children.toArray(this.props.children);
+        children[children.length - 1] = React.cloneElement(children[children.length - 1], {
+            isLastCell: true,
+        });
+
+        return <View style={rowStyle}>{children}</View>;
     }
 }
 
@@ -31,11 +43,13 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
         row: {
             flex: 1,
             flexDirection: 'row',
-            justifyContent: 'flex-start'
+        },
+        rowTopBackground: {
+            backgroundColor: changeOpacity(theme.centerChannelColor, 0.1),
         },
         rowBottomBorder: {
             borderColor: changeOpacity(theme.centerChannelColor, 0.2),
-            borderBottomWidth: 1
-        }
+            borderBottomWidth: 1,
+        },
     };
 });

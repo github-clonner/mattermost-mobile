@@ -1,7 +1,8 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
+import {Navigation} from 'react-native-navigation';
 import PropTypes from 'prop-types';
 import {
     Alert,
@@ -9,22 +10,23 @@ import {
     Linking,
     ScrollView,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import {intlShape} from 'react-intl';
 
 import FormattedText from 'app/components/formatted_text';
 import StatusBar from 'app/components/status_bar';
-import {UpgradeTypes} from 'app/constants/view';
+import {UpgradeTypes} from 'app/constants';
 import logo from 'assets/images/logo.png';
-import checkUpgradeType from 'app/utils/client_upgrade';
-import {changeOpacity, makeStyleSheetFromTheme, setNavigatorStyles} from 'app/utils/theme';
+import {checkUpgradeType, isUpgradeAvailable} from 'app/utils/client_upgrade';
+import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
+import {popTopScreen, dismissModal} from 'app/actions/navigation';
 
 export default class ClientUpgrade extends PureComponent {
     static propTypes = {
         actions: PropTypes.shape({
             logError: PropTypes.func.isRequired,
-            setLastUpgradeCheck: PropTypes.func.isRequired
+            setLastUpgradeCheck: PropTypes.func.isRequired,
         }).isRequired,
         currentVersion: PropTypes.string,
         closeAction: PropTypes.func,
@@ -32,33 +34,33 @@ export default class ClientUpgrade extends PureComponent {
         downloadLink: PropTypes.string.isRequired,
         forceUpgrade: PropTypes.bool,
         latestVersion: PropTypes.string,
-        navigator: PropTypes.object,
         theme: PropTypes.object.isRequired,
-        upgradeType: PropTypes.string
+        upgradeType: PropTypes.string,
     };
 
     static contextTypes = {
-        intl: intlShape
+        intl: intlShape,
     };
 
     constructor(props) {
         super(props);
 
-        this.props.navigator.setOnNavigatorEvent(this.onNavigatorEvent);
         this.state = {
-            upgradeType: UpgradeTypes.NO_UPGRADE
+            upgradeType: UpgradeTypes.NO_UPGRADE,
         };
     }
 
     componentDidMount() {
+        this.navigationEventListener = Navigation.events().bindComponent(this);
+
         if (this.props.userCheckedForUpgrade) {
             this.checkUpgrade(this.props);
         }
     }
 
-    componentWillReceiveProps(nextProps) {
-        if (this.props.theme !== nextProps.theme) {
-            setNavigatorStyles(this.props.navigator, nextProps.theme);
+    navigationButtonPressed({buttonId}) {
+        if (buttonId === 'close-upgrade') {
+            dismissModal();
         }
     }
 
@@ -77,19 +79,24 @@ export default class ClientUpgrade extends PureComponent {
         }
 
         this.setState({
-            upgradeType
+            upgradeType,
         });
 
         actions.setLastUpgradeCheck();
     }
 
     handleClose = () => {
-        if (this.props.closeAction) {
-            this.props.closeAction();
-        } else if (this.props.userCheckedForUpgrade) {
-            this.props.navigator.pop();
+        const {
+            closeAction,
+            userCheckedForUpgrade,
+        } = this.props;
+
+        if (closeAction) {
+            closeAction();
+        } else if (userCheckedForUpgrade) {
+            popTopScreen();
         } else {
-            this.props.navigator.dismissModal();
+            dismissModal();
         }
     };
 
@@ -105,26 +112,16 @@ export default class ClientUpgrade extends PureComponent {
             Alert.alert(
                 intl.formatMessage({
                     id: 'mobile.client_upgrade.download_error.title',
-                    defaultMessage: 'Upgrade Error'
+                    defaultMessage: 'Upgrade Error',
                 }),
                 intl.formatMessage({
                     id: 'mobile.client_upgrade.download_error.message',
-                    defaultMessage: 'An error occurred while trying to open the download link.'
-                })
+                    defaultMessage: 'An error occurred while trying to open the download link.',
+                }),
             );
 
             return false;
         });
-    };
-
-    onNavigatorEvent = (event) => {
-        if (event.type === 'NavBarButtonPress') {
-            if (event.id === 'close-upgrade') {
-                this.props.navigator.dismissModal({
-                    animationType: 'slide-down'
-                });
-            }
-        }
     };
 
     renderMustUpgrade() {
@@ -203,6 +200,7 @@ export default class ClientUpgrade extends PureComponent {
             break;
         default:
         case UpgradeTypes.NO_UPGRADE:
+        case UpgradeTypes.IS_BETA:
             messageComponent = this.renderNoUpgrade();
             break;
         }
@@ -210,23 +208,25 @@ export default class ClientUpgrade extends PureComponent {
         return (
             <View style={styles.messageContainer}>
                 {messageComponent}
-                <FormattedText
-                    id='mobile.client_upgrade.current_version'
-                    defaultMessage='Lastest Version: {version}'
-                    style={styles.messageSubtitle}
-                    values={{
-                        version: latestVersion
-                    }}
-                />
+                {upgradeType !== UpgradeTypes.IS_BETA && (
+                    <FormattedText
+                        id='mobile.client_upgrade.current_version'
+                        defaultMessage='Lastest Version: {version}'
+                        style={styles.messageSubtitle}
+                        values={{
+                            version: latestVersion,
+                        }}
+                    />
+                )}
                 <FormattedText
                     id='mobile.client_upgrade.latest_version'
                     defaultMessage='Your Version: {version}'
                     style={styles.messageSubtitle}
                     values={{
-                        version: currentVersion
+                        version: currentVersion,
                     }}
                 />
-                {upgradeType !== UpgradeTypes.NO_UPGRADE &&
+                {isUpgradeAvailable(this.state.upgradeType) &&
                     <View>
                         <TouchableOpacity
                             onPress={this.handleDownload}
@@ -283,12 +283,11 @@ const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
             flex: 1,
-            backgroundColor: theme.centerChannelBg
         },
         image: {
             marginTop: 75,
             width: 76,
-            height: 75
+            height: 75,
         },
         messageButton: {
             marginBottom: 15,
@@ -296,31 +295,31 @@ const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
             borderRadius: 2,
             alignItems: 'center',
             justifyContent: 'center',
-            borderColor: theme.buttonBg
+            borderColor: theme.buttonBg,
         },
         messageButtonText: {
             paddingVertical: 10,
             paddingHorizontal: 20,
             fontWeight: '600',
-            color: theme.buttonBg
+            color: theme.buttonBg,
         },
         messageContainer: {
             marginTop: 25,
             flex: 1,
             alignSelf: 'stretch',
-            alignItems: 'center'
+            alignItems: 'center',
         },
         messageCloseButton: {
             marginBottom: 15,
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
         },
         messageSubtitle: {
             fontSize: 16,
             marginBottom: 20,
             color: theme.centerChannelColor,
             textAlign: 'center',
-            paddingHorizontal: 30
+            paddingHorizontal: 30,
         },
         messageTitle: {
             fontSize: 24,
@@ -328,15 +327,15 @@ const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
             fontWeight: '600',
             color: theme.centerChannelColor,
             textAlign: 'center',
-            paddingHorizontal: 30
+            paddingHorizontal: 30,
         },
         scrollView: {
             flex: 1,
-            backgroundColor: changeOpacity(theme.centerChannelColor, 0.03)
+            backgroundColor: changeOpacity(theme.centerChannelColor, 0.03),
         },
         scrollViewContent: {
             paddingBottom: 20,
-            alignItems: 'center'
-        }
+            alignItems: 'center',
+        },
     };
 });

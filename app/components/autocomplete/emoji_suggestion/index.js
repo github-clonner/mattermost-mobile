@@ -1,16 +1,15 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {connect} from 'react-redux';
 import {createSelector} from 'reselect';
 import {bindActionCreators} from 'redux';
 
-import {getCustomEmojisByName} from 'mattermost-redux/selectors/entities/emojis';
-import {autocompleteCustomEmojis} from 'mattermost-redux/actions/emojis';
-import {Client4} from 'mattermost-redux/client';
+import {getCustomEmojisByName} from '@mm-redux/selectors/entities/emojis';
+import {autocompleteCustomEmojis} from '@mm-redux/actions/emojis';
 
 import {addReactionToLatestPost} from 'app/actions/views/emoji';
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
 import {EmojiIndicesByAlias} from 'app/utils/emojis';
 
 import EmojiSuggestion from './emoji_suggestion';
@@ -25,7 +24,7 @@ const getEmojisByName = createSelector(
         }
 
         return Array.from(emoticons);
-    }
+    },
 );
 
 function mapStateToProps(state) {
@@ -35,7 +34,7 @@ function mapStateToProps(state) {
         location: 0,
         distance: 100,
         minMatchCharLength: 2,
-        maxPatternLength: 32
+        maxPatternLength: 32,
     };
 
     const emojis = getEmojisByName(state);
@@ -46,7 +45,6 @@ function mapStateToProps(state) {
         fuse,
         emojis,
         theme: getTheme(state),
-        serverVersion: state.entities.general.serverVersion || Client4.getServerVersion()
     };
 }
 
@@ -54,8 +52,8 @@ function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
             addReactionToLatestPost,
-            autocompleteCustomEmojis
-        }, dispatch)
+            autocompleteCustomEmojis,
+        }, dispatch),
     };
 }
 

@@ -1,38 +1,37 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
     View,
-    ViewPropTypes
+    ViewPropTypes,
 } from 'react-native';
 
-import FormattedDate from 'app/components/formatted_date';
+import RecentDate from 'app/components/recent_date';
 import {makeStyleSheetFromTheme} from 'app/utils/theme';
 
+// DateHeader accepts as a timestamp for rendering as part of a post list.
 export default class DateHeader extends PureComponent {
     static propTypes = {
-        date: PropTypes.object.isRequired,
+        date: PropTypes.number.isRequired,
         theme: PropTypes.object.isRequired,
-        style: ViewPropTypes.style
+        timeZone: PropTypes.string,
+        style: ViewPropTypes.style,
     };
 
     render() {
-        const {date, theme} = this.props;
+        const {theme, timeZone, date} = this.props;
         const style = getStyleSheet(theme);
 
         return (
             <View style={[style.container, this.props.style]}>
                 <View style={style.line}/>
                 <View style={style.dateContainer}>
-                    <FormattedDate
+                    <RecentDate
                         style={style.date}
+                        timeZone={timeZone}
                         value={date}
-                        weekday='short'
-                        day='2-digit'
-                        month='short'
-                        year='numeric'
                     />
                 </View>
                 <View style={style.line}/>
@@ -46,21 +45,22 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
         container: {
             alignItems: 'center',
             flexDirection: 'row',
-            height: 28
+            height: 28,
+            marginTop: 8,
         },
         dateContainer: {
-            marginHorizontal: 15
+            marginHorizontal: 15,
         },
         line: {
             flex: 1,
             height: 1,
             backgroundColor: theme.centerChannelColor,
-            opacity: 0.2
+            opacity: 0.2,
         },
         date: {
             color: theme.centerChannelColor,
             fontSize: 14,
-            fontWeight: '600'
-        }
+            fontWeight: '600',
+        },
     };
 });

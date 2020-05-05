@@ -1,11 +1,11 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React from 'react';
 import PropTypes from 'prop-types';
 import {
     Text,
-    View
+    View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import {makeStyleSheetFromTheme, changeOpacity} from 'app/utils/theme';
@@ -15,13 +15,15 @@ import CustomListRow from 'app/components/custom_list/custom_list_row';
 export default class ChannelListRow extends React.PureComponent {
     static propTypes = {
         id: PropTypes.string.isRequired,
+        isArchived: PropTypes.bool,
         theme: PropTypes.object.isRequired,
         channel: PropTypes.object.isRequired,
-        ...CustomListRow.propTypes
+        ...CustomListRow.propTypes,
+        isLandscape: PropTypes.bool.isRequired,
     };
 
     onPress = () => {
-        this.props.onPress(this.props.id);
+        this.props.onPress(this.props.id, this.props.item);
     };
 
     render() {
@@ -43,16 +45,16 @@ export default class ChannelListRow extends React.PureComponent {
         return (
             <CustomListRow
                 id={this.props.id}
-                theme={this.props.theme}
                 onPress={this.props.onPress ? this.onPress : null}
                 enabled={this.props.enabled}
                 selectable={this.props.selectable}
                 selected={this.props.selected}
+                isLandscape={this.props.isLandscape}
             >
                 <View style={style.container}>
                     <View style={style.titleContainer}>
                         <Icon
-                            name='globe'
+                            name={this.props.isArchived ? 'archive' : 'globe'}
                             style={style.icon}
                         />
                         <Text style={style.displayName}>
@@ -70,25 +72,26 @@ const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
     return {
         titleContainer: {
             alignItems: 'center',
-            flexDirection: 'row'
+            flexDirection: 'row',
         },
         displayName: {
             fontSize: 16,
             color: theme.centerChannelColor,
-            marginLeft: 5
+            marginLeft: 5,
         },
         icon: {
             fontSize: 16,
-            color: theme.centerChannelColor
+            color: theme.centerChannelColor,
         },
         container: {
             flex: 1,
-            flexDirection: 'column'
+            flexDirection: 'column',
+            paddingHorizontal: 15,
         },
         purpose: {
             marginTop: 7,
             fontSize: 13,
-            color: changeOpacity(theme.centerChannelColor, 0.5)
-        }
+            color: changeOpacity(theme.centerChannelColor, 0.5),
+        },
     };
 });

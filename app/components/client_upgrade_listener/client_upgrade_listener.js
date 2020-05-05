@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
@@ -8,16 +8,16 @@ import {
     Animated,
     Linking,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import {intlShape} from 'react-intl';
-import DeviceInfo from 'react-native-device-info';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
 
 import FormattedText from 'app/components/formatted_text';
-import {UpgradeTypes} from 'app/constants/view';
-import checkUpgradeType from 'app/utils/client_upgrade';
+import {DeviceTypes} from 'app/constants';
+import {checkUpgradeType, isUpgradeAvailable} from 'app/utils/client_upgrade';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
+import {showModal, dismissModal} from 'app/actions/navigation';
 
 const {View: AnimatedView} = Animated;
 
@@ -27,7 +27,7 @@ export default class ClientUpgradeListener extends PureComponent {
     static propTypes = {
         actions: PropTypes.shape({
             logError: PropTypes.func.isRequired,
-            setLastUpgradeCheck: PropTypes.func.isRequired
+            setLastUpgradeCheck: PropTypes.func.isRequired,
         }).isRequired,
         currentVersion: PropTypes.string,
         downloadLink: PropTypes.string,
@@ -36,25 +36,22 @@ export default class ClientUpgradeListener extends PureComponent {
         lastUpgradeCheck: PropTypes.number,
         latestVersion: PropTypes.string,
         minVersion: PropTypes.string,
-        navigator: PropTypes.object,
-        theme: PropTypes.object.isRequired
+        theme: PropTypes.object.isRequired,
     };
 
     static contextTypes = {
-        intl: intlShape
+        intl: intlShape,
     };
 
     constructor(props) {
         super(props);
-
-        this.isX = DeviceInfo.getModel() === 'iPhone X';
 
         MaterialIcon.getImageSource('close', 20, this.props.theme.sidebarHeaderTextColor).then((source) => {
             this.closeButton = source;
         });
 
         this.state = {
-            top: new Animated.Value(-100)
+            top: new Animated.Value(-100),
         };
     }
 
@@ -73,7 +70,7 @@ export default class ClientUpgradeListener extends PureComponent {
         if (versionMismatch && (forceUpgrade || Date.now() - lastUpgradeCheck > UPDATE_TIMEOUT)) {
             this.checkUpgrade(minVersion, latestVersion, nextProps.isLandscape);
         } else if (this.props.isLandscape !== nextProps.isLandscape &&
-            this.state.upgradeType !== UpgradeTypes.NO_UPGRADE && this.isX) {
+            isUpgradeAvailable(this.state.upgradeType) && DeviceTypes.IS_IPHONE_WITH_INSETS) {
             const newTop = nextProps.isLandscape ? 45 : 100;
             this.setState({top: new Animated.Value(newTop)});
         }
@@ -86,7 +83,7 @@ export default class ClientUpgradeListener extends PureComponent {
 
         this.setState({upgradeType});
 
-        if (upgradeType === UpgradeTypes.NO_UPGRADE) {
+        if (!isUpgradeAvailable(upgradeType)) {
             return;
         }
 
@@ -100,15 +97,15 @@ export default class ClientUpgradeListener extends PureComponent {
     toggleUpgradeMessage = (show = true, isLandscape) => {
         let toValue = -100;
         if (show) {
-            if (this.isX && isLandscape) {
+            if (DeviceTypes.IS_IPHONE_WITH_INSETS && isLandscape) {
                 toValue = 45;
             } else {
-                toValue = this.isX ? 100 : 75;
+                toValue = DeviceTypes.IS_IPHONE_WITH_INSETS ? 100 : 75;
             }
         }
         Animated.timing(this.state.top, {
             toValue,
-            duration: 300
+            duration: 300,
         }).start();
     };
 
@@ -128,12 +125,12 @@ export default class ClientUpgradeListener extends PureComponent {
             Alert.alert(
                 intl.formatMessage({
                     id: 'mobile.client_upgrade.download_error.title',
-                    defaultMessage: 'Upgrade Error'
+                    defaultMessage: 'Upgrade Error',
                 }),
                 intl.formatMessage({
                     id: 'mobile.client_upgrade.download_error.message',
-                    defaultMessage: 'An error occurred while trying to open the download link.'
-                })
+                    defaultMessage: 'An error occurred while trying to open the download link.',
+                }),
             );
 
             return false;
@@ -144,32 +141,30 @@ export default class ClientUpgradeListener extends PureComponent {
 
     handleLearnMore = () => {
         const {intl} = this.context;
-        this.props.navigator.dismissModal({animationType: 'none'});
 
-        this.props.navigator.showModal({
-            screen: 'ClientUpgrade',
-            title: intl.formatMessage({id: 'mobile.client_upgrade', defaultMessage: 'Upgrade App'}),
-            navigatorStyle: {
-                navBarHidden: false,
-                statusBarHidden: false,
-                statusBarHideWithNavBar: false
-            },
-            navigatorButtons: {
+        dismissModal();
+
+        const screen = 'ClientUpgrade';
+        const title = intl.formatMessage({id: 'mobile.client_upgrade', defaultMessage: 'Upgrade App'});
+        const passProps = {
+            upgradeType: this.state.upgradeType,
+        };
+        const options = {
+            topBar: {
                 leftButtons: [{
                     id: 'close-upgrade',
-                    icon: this.closeButton
-                }]
+                    icon: this.closeButton,
+                }],
             },
-            passProps: {
-                upgradeType: this.state.upgradeType
-            }
-        });
+        };
+
+        showModal(screen, title, passProps, options);
 
         this.toggleUpgradeMessage(false);
     };
 
     render() {
-        if (this.state.upgradeType === UpgradeTypes.NO_UPGRADE) {
+        if (!isUpgradeAvailable(this.state.upgradeType)) {
             return null;
         }
 
@@ -226,28 +221,28 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
             justifyContent: 'space-around',
             borderTopColor: changeOpacity(theme.centerChannelColor, 0.2),
             backgroundColor: changeOpacity(theme.centerChannelColor, 0.06),
-            borderTopWidth: 1
+            borderTopWidth: 1,
         },
         button: {
             color: theme.linkColor,
             fontSize: 13,
             paddingHorizontal: 5,
-            paddingVertical: 5
+            paddingVertical: 5,
         },
         container: {
             flex: 1,
             backgroundColor: changeOpacity(theme.centerChannelBg, 0.8),
-            borderRadius: 5
+            borderRadius: 5,
         },
         message: {
             flex: 1,
             justifyContent: 'center',
-            alignItems: 'center'
+            alignItems: 'center',
         },
         messageText: {
             fontSize: 16,
             color: changeOpacity(theme.centerChannelColor, 0.8),
-            fontWeight: '600'
+            fontWeight: '600',
         },
         wrapper: {
             position: 'absolute',
@@ -262,10 +257,10 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
             shadowColor: theme.centerChannelColor,
             shadowOffset: {
                 width: 0,
-                height: 3
+                height: 3,
             },
             shadowOpacity: 0.2,
-            shadowRadius: 2
-        }
+            shadowRadius: 2,
+        },
     };
 });

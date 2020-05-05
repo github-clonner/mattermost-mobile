@@ -1,20 +1,23 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {intlShape} from 'react-intl';
+import {Navigation} from 'react-native-navigation';
 
 import {getNotificationProps} from 'app/utils/notify_props';
-import {setNavigatorStyles} from 'app/utils/theme';
 
 export default class NotificationSettingsMentionsBase extends PureComponent {
     static propTypes = {
         currentUser: PropTypes.object.isRequired,
         intl: intlShape.isRequired,
-        navigator: PropTypes.object,
         onBack: PropTypes.func.isRequired,
-        theme: PropTypes.object.isRequired
+        theme: PropTypes.object.isRequired,
+    };
+
+    static defaultProps = {
+        currentUser: {},
     };
 
     constructor(props) {
@@ -23,27 +26,19 @@ export default class NotificationSettingsMentionsBase extends PureComponent {
         const {currentUser} = props;
         const notifyProps = getNotificationProps(currentUser);
 
-        props.navigator.setOnNavigatorEvent(this.onNavigatorEvent);
-
-        this.goingBack = true; //use to identify if the navigator is popping this screen
+        this.goingBack = true; // use to identify if the navigator is popping this screen
         this.state = this.setStateFromNotifyProps(notifyProps);
     }
 
-    componentWillReceiveProps(nextProps) {
-        if (this.props.theme !== nextProps.theme) {
-            setNavigatorStyles(this.props.navigator, nextProps.theme);
-        }
+    componentDidMount() {
+        this.navigationEventListener = Navigation.events().bindComponent(this);
     }
 
-    onNavigatorEvent = (event) => {
-        if (event.type === 'ScreenChangedEvent' && this.goingBack) {
-            switch (event.id) {
-            case 'willDisappear':
-                this.saveUserNotifyProps();
-                break;
-            }
+    componentDidDisappear() {
+        if (this.goingBack) {
+            this.saveUserNotifyProps();
         }
-    };
+    }
 
     setStateFromNotifyProps = (notifyProps) => {
         const mentionKeys = (notifyProps.mention_keys || '').split(',');
@@ -53,37 +48,37 @@ export default class NotificationSettingsMentionsBase extends PureComponent {
         }
 
         const comments = notifyProps.comments || 'any';
+        const mentionKeysString = mentionKeys.join(',');
 
         const newState = {
             ...notifyProps,
             comments,
+            newReplyValue: comments,
             usernameMention: usernameMentionIndex > -1,
-            mention_keys: mentionKeys.join(','),
+            mention_keys: mentionKeysString,
+            androidKeywords: mentionKeysString,
             showKeywordsModal: false,
-            showReplyModal: false
+            showReplyModal: false,
         };
-
-        this.keywords = newState.mention_keys;
-        this.replyValue = comments;
 
         return newState;
     };
 
     toggleFirstNameMention = () => {
         this.setState({
-            first_name: (!(this.state.first_name === 'true')).toString()
+            first_name: (!(this.state.first_name === 'true')).toString(),
         });
     };
 
     toggleUsernameMention = () => {
         this.setState({
-            usernameMention: !this.state.usernameMention
+            usernameMention: !this.state.usernameMention,
         });
     };
 
     toggleChannelMentions = () => {
         this.setState({
-            channel: (!(this.state.channel === 'true')).toString()
+            channel: (!(this.state.channel === 'true')).toString(),
         });
     };
 
@@ -91,14 +86,14 @@ export default class NotificationSettingsMentionsBase extends PureComponent {
         this.goingBack = true;
         this.setState({
             mention_keys: text,
-            showKeywordsModal: false
+            showKeywordsModal: false,
         });
     };
 
     setReplyNotifications = (value) => {
         this.setState({
             comments: value,
-            showReplyModal: false
+            showReplyModal: false,
         });
     };
 
@@ -122,7 +117,7 @@ export default class NotificationSettingsMentionsBase extends PureComponent {
         this.props.onBack({
             ...notifyProps,
             mention_keys: mentionKeys,
-            user_id: this.props.currentUser.id
+            user_id: this.props.currentUser.id,
         });
     };
 }

@@ -1,30 +1,34 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
-import {Image, TouchableOpacity, View} from 'react-native';
+import {Platform, StyleSheet, View} from 'react-native';
+import FastImage from 'react-native-fast-image';
 
 import AppIcon from 'app/components/app_icon';
 import ProfilePicture from 'app/components/profile_picture';
+import TouchableWithFeedback from 'app/components/touchable_with_feedback';
 import {emptyFunction} from 'app/utils/general';
 import webhookIcon from 'assets/images/icons/webhook.jpg';
-
-const PROFILE_PICTURE_SIZE = 32;
+import {ViewTypes} from 'app/constants';
 
 export default class PostProfilePicture extends PureComponent {
     static propTypes = {
         enablePostIconOverride: PropTypes.bool,
         fromWebHook: PropTypes.bool,
         isSystemMessage: PropTypes.bool,
+        fromAutoResponder: PropTypes.bool,
         overrideIconUrl: PropTypes.string,
         onViewUserProfile: PropTypes.func,
         theme: PropTypes.object,
-        userId: PropTypes.string
+        userId: PropTypes.string,
+        isBot: PropTypes.bool,
+        isEmoji: PropTypes.bool,
     };
 
     static defaultProps = {
-        onViewUserProfile: emptyFunction
+        onViewUserProfile: emptyFunction,
     };
 
     render() {
@@ -32,19 +36,22 @@ export default class PostProfilePicture extends PureComponent {
             enablePostIconOverride,
             fromWebHook,
             isSystemMessage,
+            fromAutoResponder,
             onViewUserProfile,
             overrideIconUrl,
             theme,
-            userId
+            userId,
+            isBot,
+            isEmoji,
         } = this.props;
 
-        if (isSystemMessage) {
+        if (isSystemMessage && !fromAutoResponder && !isBot) {
             return (
-                <View>
+                <View style={style.buffer}>
                     <AppIcon
                         color={theme.centerChannelColor}
-                        height={PROFILE_PICTURE_SIZE}
-                        width={PROFILE_PICTURE_SIZE}
+                        height={ViewTypes.PROFILE_PICTURE_SIZE}
+                        width={ViewTypes.PROFILE_PICTURE_SIZE}
                     />
                 </View>
             );
@@ -52,36 +59,64 @@ export default class PostProfilePicture extends PureComponent {
 
         if (fromWebHook && enablePostIconOverride) {
             const icon = overrideIconUrl ? {uri: overrideIconUrl} : webhookIcon;
-
+            const frameSize = ViewTypes.PROFILE_PICTURE_SIZE;
+            const pictureSize = isEmoji ? ViewTypes.PROFILE_PICTURE_EMOJI_SIZE : ViewTypes.PROFILE_PICTURE_SIZE;
+            const borderRadius = isEmoji ? 0 : ViewTypes.PROFILE_PICTURE_SIZE / 2;
             return (
-                <View>
-                    <Image
+                <View
+                    style={[{
+                        borderRadius,
+                        overflow: 'hidden',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        height: frameSize,
+                        width: frameSize,
+                    }, style.buffer]}
+                >
+                    <FastImage
                         source={icon}
                         style={{
-                            height: PROFILE_PICTURE_SIZE,
-                            width: PROFILE_PICTURE_SIZE,
-                            borderRadius: PROFILE_PICTURE_SIZE / 2
+                            height: pictureSize,
+                            width: pictureSize,
                         }}
                     />
                 </View>
             );
         }
 
+        const showProfileStatus = !fromAutoResponder;
         let component = (
             <ProfilePicture
                 userId={userId}
-                size={PROFILE_PICTURE_SIZE}
+                size={ViewTypes.PROFILE_PICTURE_SIZE}
+                showStatus={showProfileStatus}
             />
         );
 
         if (!fromWebHook) {
             component = (
-                <TouchableOpacity onPress={onViewUserProfile}>
+                <TouchableWithFeedback
+                    onPress={onViewUserProfile}
+                    type={'opacity'}
+                >
                     {component}
-                </TouchableOpacity>
+                </TouchableWithFeedback>
             );
         }
 
         return component;
     }
 }
+
+const style = StyleSheet.create({
+    buffer: {
+        ...Platform.select({
+            android: {
+                marginRight: 2,
+            },
+            ios: {
+                marginRight: 3,
+            },
+        }),
+    },
+});

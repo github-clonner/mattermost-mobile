@@ -1,26 +1,26 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
+import {login} from 'app/actions/views/user';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {getConfig, getLicense} from '@mm-redux/selectors/entities/general';
+import {isLandscape} from 'app/selectors/device';
 import LoginActions from 'app/actions/views/login';
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
-
-import {checkMfa, login} from 'mattermost-redux/actions/users';
 
 import Login from './login.js';
 
 function mapStateToProps(state) {
-    const {checkMfa: checkMfaRequest, login: loginRequest} = state.requests.users;
-    const {config, license} = state.entities.general;
+    const config = getConfig(state);
+    const license = getLicense(state);
     return {
         ...state.views.login,
-        checkMfaRequest,
-        loginRequest,
         config,
         license,
-        theme: getTheme(state)
+        theme: getTheme(state),
+        isLandscape: isLandscape(state),
     };
 }
 
@@ -28,9 +28,8 @@ function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
             ...LoginActions,
-            checkMfa,
-            login
-        }, dispatch)
+            login,
+        }, dispatch),
     };
 }
 

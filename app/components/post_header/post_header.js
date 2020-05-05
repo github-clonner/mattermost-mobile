@@ -1,36 +1,35 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
-    Platform,
     Text,
-    TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 
 import FormattedText from 'app/components/formatted_text';
 import FormattedTime from 'app/components/formatted_time';
 import FormattedDate from 'app/components/formatted_date';
 import ReplyIcon from 'app/components/reply_icon';
-import FlagIcon from 'app/components/flag_icon';
+import Tag, {BotTag, GuestTag} from 'app/components/tag';
+import TouchableWithFeedback from 'app/components/touchable_with_feedback';
 import {emptyFunction} from 'app/utils/general';
+import {t} from 'app/utils/i18n';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
-
-const BOT_NAME = 'BOT';
 
 export default class PostHeader extends PureComponent {
     static propTypes = {
         commentCount: PropTypes.number,
         commentedOnDisplayName: PropTypes.string,
         createAt: PropTypes.number.isRequired,
-        displayName: PropTypes.string.isRequired,
+        displayName: PropTypes.string,
         enablePostUsernameOverride: PropTypes.bool,
         fromWebHook: PropTypes.bool,
         isPendingOrFailedPost: PropTypes.bool,
         isSearchResult: PropTypes.bool,
         isSystemMessage: PropTypes.bool,
+        fromAutoResponder: PropTypes.bool,
         militaryTime: PropTypes.bool,
         onPress: PropTypes.func,
         onUsernamePress: PropTypes.func,
@@ -39,77 +38,45 @@ export default class PostHeader extends PureComponent {
         shouldRenderReplyButton: PropTypes.bool,
         showFullDate: PropTypes.bool,
         theme: PropTypes.object.isRequired,
-        username: PropTypes.string.isRequired,
-        isFlagged: PropTypes.bool
+        username: PropTypes.string,
+        isBot: PropTypes.bool,
+        isGuest: PropTypes.bool,
+        userTimezone: PropTypes.string,
+        enableTimezone: PropTypes.bool,
+        previousPostExists: PropTypes.bool,
+        post: PropTypes.object,
+        beforePrevPostUserId: PropTypes.string,
+        isLandscape: PropTypes.bool.isRequired,
     };
 
     static defaultProps = {
         commentCount: 0,
         onPress: emptyFunction,
-        onUsernamePress: emptyFunction
+        onUsernamePress: emptyFunction,
     };
 
     handleUsernamePress = () => {
-        this.props.onUsernamePress(this.props.username);
-    }
-
-    getDisplayName = (style) => {
-        const {
-            enablePostUsernameOverride,
-            fromWebHook,
-            isSystemMessage,
-            overrideUsername
-        } = this.props;
-
-        if (fromWebHook) {
-            let name = this.props.displayName;
-            if (overrideUsername && enablePostUsernameOverride) {
-                name = overrideUsername;
-            }
-
-            return (
-                <View style={style.botContainer}>
-                    <Text style={style.displayName}>
-                        {name}
-                    </Text>
-                    <Text style={style.bot}>
-                        {BOT_NAME}
-                    </Text>
-                </View>
-            );
-        } else if (isSystemMessage) {
-            return (
-                <FormattedText
-                    id='post_info.system'
-                    defaultMessage='System'
-                    style={style.displayName}
-                />
-            );
-        } else if (this.props.displayName) {
-            return (
-                <TouchableOpacity onPress={this.handleUsernamePress}>
-                    <Text style={style.displayName}>
-                        {this.props.displayName}
-                    </Text>
-                </TouchableOpacity>
-            );
+        if (this.props.username) {
+            this.props.onUsernamePress(this.props.username);
         }
-
-        return (
-            <FormattedText
-                id='channel_loader.someone'
-                defaultMessage='Someone'
-                style={style.displayName}
-            />
-        );
     };
 
-    renderCommentedOnMessage = (style) => {
-        if (!this.props.renderReplies || !this.props.commentedOnDisplayName) {
+    renderCommentedOnMessage = () => {
+        const {
+            beforePrevPostUserId,
+            commentedOnDisplayName,
+            post,
+            previousPostExists,
+            renderReplies,
+            theme,
+        } = this.props;
+
+        if (!renderReplies || !commentedOnDisplayName || (!previousPostExists && post.user_id === beforePrevPostUserId)) {
             return null;
         }
 
-        const displayName = this.props.commentedOnDisplayName;
+        const style = getStyleSheet(theme);
+        const displayName = commentedOnDisplayName;
 
         let name;
         if (displayName) {
@@ -136,175 +103,301 @@ export default class PostHeader extends PureComponent {
                 defaultMessage='Commented on {name}{apostrophe} message: '
                 values={{
                     name,
-                    apostrophe
+                    apostrophe,
                 }}
                 style={style.commentedOn}
             />
         );
     };
 
-    render() {
+    calcNameWidth = () => {
         const {
-            commentedOnDisplayName,
-            commentCount,
-            createAt,
-            isPendingOrFailedPost,
-            isSearchResult,
-            militaryTime,
-            onPress,
+            fromWebHook,
+            fromAutoResponder,
             renderReplies,
             shouldRenderReplyButton,
-            showFullDate,
+            commentedOnDisplayName,
+            commentCount,
+            isBot,
+            isLandscape,
             theme,
-            isFlagged
         } = this.props;
+
         const style = getStyleSheet(theme);
         const showReply = shouldRenderReplyButton || (!commentedOnDisplayName && commentCount > 0 && renderReplies);
+        const reduceWidth = showReply && (isBot || fromAutoResponder || fromWebHook);
 
-        let dateComponent;
-        if (showFullDate) {
-            dateComponent = (
-                <View style={style.datetime}>
-                    <Text style={style.time}>
-                        <FormattedDate value={createAt}/>
-                    </Text>
-                    <Text style={style.time}>
-                        <FormattedTime
-                            hour12={!militaryTime}
-                            value={createAt}
-                        />
+        if (reduceWidth && isLandscape) {
+            return style.displayNameContainerLandscapeBotReplyWidth;
+        } else if (isLandscape) {
+            return style.displayNameContainerLandscape;
+        } else if (reduceWidth) {
+            return style.displayNameContainerBotReplyWidth;
+        }
+        return null;
+    }
+
+    renderDisplayName = () => {
+        const {
+            displayName,
+            enablePostUsernameOverride,
+            fromWebHook,
+            isSystemMessage,
+            fromAutoResponder,
+            overrideUsername,
+            theme,
+        } = this.props;
+
+        const style = getStyleSheet(theme);
+
+        const displayNameWidth = this.calcNameWidth();
+        const displayNameStyle = [style.displayNameContainer, displayNameWidth];
+
+        if (fromAutoResponder || fromWebHook) {
+            let name = displayName;
+            if (overrideUsername && enablePostUsernameOverride) {
+                name = overrideUsername;
+            }
+
+            return (
+                <View style={displayNameStyle}>
+                    <Text
+                        style={style.displayName}
+                        ellipsizeMode={'tail'}
+                        numberOfLines={1}
+                    >
+                        {name}
                     </Text>
                 </View>
             );
-        } else {
-            dateComponent = (
-                <Text style={style.time}>
-                    <FormattedTime
-                        hour12={!militaryTime}
-                        value={createAt}
+        } else if (isSystemMessage) {
+            return (
+                <View style={style.displayNameContainer}>
+                    <FormattedText
+                        id='post_info.system'
+                        defaultMessage='System'
+                        style={[style.displayName]}
                     />
-                </Text>
+                </View>
+            );
+        } else if (displayName) {
+            return (
+                <TouchableWithFeedback
+                    onPress={this.handleUsernamePress}
+                    style={displayNameStyle}
+                    type={'opacity'}
+                >
+                    <Text
+                        style={style.displayName}
+                        ellipsizeMode={'tail'}
+                        numberOfLines={1}
+                    >
+                        {displayName}
+                    </Text>
+                </TouchableWithFeedback>
             );
         }
 
         return (
-            <View>
-                <View style={[style.postInfoContainer, (isPendingOrFailedPost && style.pendingPost)]}>
-                    <View style={{flexDirection: 'row', flex: 1}}>
-                        {this.getDisplayName(style)}
-                        <View style={style.timeContainer}>
-                            {dateComponent}
-                        </View>
-                        {isFlagged &&
-                            <View style={style.flagContainer}>
-                                <FlagIcon
-                                    height={11}
-                                    width={11}
-                                    color={theme.linkColor}
-                                />
-                            </View>
-                        }
-                    </View>
-                    {showReply &&
-                    <TouchableOpacity
-                        onPress={onPress}
-                        style={style.replyIconContainer}
-                    >
-                        <ReplyIcon
-                            height={15}
-                            width={15}
-                            color={theme.linkColor}
-                        />
-                        {!isSearchResult &&
-                        <Text style={style.replyText}>{commentCount}</Text>
-                        }
-                    </TouchableOpacity>
-                    }
-                </View>
-                {commentedOnDisplayName !== '' &&
-                <View>
-                    {this.renderCommentedOnMessage(style)}
-                </View>
-                }
+            <View style={style.displayNameContainer}>
+                <FormattedText
+                    id='channel_loader.someone'
+                    defaultMessage='Someone'
+                    style={style.displayName}
+                />
             </View>
+        );
+    };
+
+    renderReply = () => {
+        const {
+            commentCount,
+            commentedOnDisplayName,
+            isSearchResult,
+            onPress,
+            renderReplies,
+            shouldRenderReplyButton,
+            theme,
+        } = this.props;
+        const style = getStyleSheet(theme);
+        const showReply = shouldRenderReplyButton || (!commentedOnDisplayName && commentCount > 0 && renderReplies);
+
+        if (!showReply) {
+            return null;
+        }
+
+        return (
+            <View style={style.replyWrapper}>
+                <TouchableWithFeedback
+                    onPress={onPress}
+                    style={style.replyIconContainer}
+                    type={'opacity'}
+                >
+                    <ReplyIcon
+                        height={16}
+                        width={16}
+                        color={theme.linkColor}
+                    />
+                    {!isSearchResult &&
+                    <Text style={style.replyText}>{commentCount}</Text>
+                    }
+                </TouchableWithFeedback>
+            </View>
+        );
+    };
+
+    renderTag = () => {
+        const {fromAutoResponder, fromWebHook, isBot, isSystemMessage, isGuest, theme} = this.props;
+        const style = getStyleSheet(theme);
+
+        if (fromWebHook || isBot) {
+            return (
+                <BotTag
+                    style={style.tag}
+                    theme={theme}
+                />
+            );
+        } else if (isSystemMessage) {
+            return null;
+        } else if (isGuest) {
+            return (
+                <GuestTag
+                    style={style.tag}
+                    theme={theme}
+                />
+            );
+        } else if (fromAutoResponder) {
+            return (
+                <Tag
+                    id={t('post_info.auto_responder')}
+                    defaultMessage={'AUTOMATIC REPLY'}
+                    style={style.tag}
+                    theme={theme}
+                />
+            );
+        }
+
+        return null;
+    };
+
+    render() {
+        const {
+            createAt,
+            isPendingOrFailedPost,
+            userTimezone,
+            militaryTime,
+            showFullDate,
+            theme,
+        } = this.props;
+        const style = getStyleSheet(theme);
+
+        let dateComponent;
+        if (showFullDate) {
+            dateComponent = (
+                <FormattedDate
+                    format={`ddd, MMM DD, YYYY ${militaryTime ? 'HH:mm' : 'hh:mm A'}`}
+                    timeZone={userTimezone}
+                    value={createAt}
+                    style={style.time}
+                />
+            );
+        } else {
+            dateComponent = (
+                <FormattedTime
+                    timeZone={userTimezone}
+                    hour12={!militaryTime}
+                    value={createAt}
+                    style={style.time}
+                />
+            );
+        }
+
+        return (
+            <React.Fragment>
+                <View style={[style.container, (isPendingOrFailedPost && style.pendingPost)]}>
+                    <View style={style.wrapper}>
+                        {this.renderDisplayName()}
+                        {this.renderTag()}
+                        {dateComponent}
+                        {this.renderReply()}
+                    </View>
+                </View>
+                {this.renderCommentedOnMessage(style)}
+            </React.Fragment>
         );
     }
 }
 
 const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
-        commentedOn: {
-            color: changeOpacity(theme.centerChannelColor, 0.65),
-            marginBottom: 3,
-            lineHeight: 21
-        },
-        postInfoContainer: {
-            alignItems: 'center',
-            flexDirection: 'row',
-            marginTop: 10
+        container: {
+            flex: 1,
+            marginTop: 10,
         },
         pendingPost: {
-            opacity: 0.5
+            opacity: 0.5,
         },
-        timeContainer: {
-            justifyContent: 'center'
-        },
-        datetime: {
-            flex: 1,
-            flexDirection: 'row'
-        },
-        time: {
-            color: theme.centerChannelColor,
-            fontSize: 13,
-            marginLeft: 5,
-            marginBottom: 1,
-            opacity: 0.5
-        },
-        replyIconContainer: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            height: 30,
-            minWidth: 40,
-            paddingVertical: 10
-        },
-        replyText: {
-            fontSize: 15,
-            marginLeft: 3,
-            color: theme.linkColor
-        },
-        botContainer: {
-            flexDirection: 'row'
-        },
-        bot: {
-            alignSelf: 'center',
-            backgroundColor: changeOpacity(theme.centerChannelColor, 0.15),
-            borderRadius: 2,
-            color: theme.centerChannelColor,
-            fontSize: 10,
-            fontWeight: '600',
+        tag: {
+            marginLeft: 0,
             marginRight: 5,
-            paddingVertical: 2,
-            paddingHorizontal: 4
+            marginBottom: 5,
+        },
+        wrapper: {
+            flex: 1,
+            flexDirection: 'row',
+        },
+        displayNameContainer: {
+            maxWidth: '60%',
+            marginRight: 5,
+            marginBottom: 3,
         },
         displayName: {
             color: theme.centerChannelColor,
             fontSize: 15,
             fontWeight: '600',
-            marginRight: 5,
-            marginBottom: 3
+            flexGrow: 1,
+            paddingVertical: 2,
         },
-        flagContainer: {
-            marginLeft: 10,
-            alignSelf: 'center',
-            ...Platform.select({
-                ios: {
-                    marginBottom: 2
-                },
-                android: {
-                    marginBottom: 1
-                }
-            })
-        }
+        time: {
+            color: theme.centerChannelColor,
+            fontSize: 12,
+            marginTop: 5,
+            opacity: 0.5,
+            flex: 1,
+        },
+        replyWrapper: {
+            flex: 1,
+            justifyContent: 'flex-end',
+        },
+        replyIconContainer: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            justifyContent: 'flex-end',
+            minWidth: 40,
+            paddingTop: 2,
+            paddingBottom: 10,
+            flex: 1,
+        },
+        replyText: {
+            fontSize: 12,
+            marginLeft: 2,
+            marginTop: 2,
+            color: theme.linkColor,
+        },
+        commentedOn: {
+            color: changeOpacity(theme.centerChannelColor, 0.65),
+            marginBottom: 3,
+            lineHeight: 21,
+        },
+        displayNameContainerBotReplyWidth: {
+            maxWidth: '50%',
+        },
+        displayNameContainerLandscape: {
+            maxWidth: '80%',
+        },
+        displayNameContainerLandscapeBotReplyWidth: {
+            maxWidth: '70%',
+        },
+
     };
 });

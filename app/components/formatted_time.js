@@ -1,37 +1,50 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React from 'react';
 import PropTypes from 'prop-types';
-import {injectIntl, intlShape} from 'react-intl';
 import {Text} from 'react-native';
+import moment from 'moment-timezone';
 
-class FormattedTime extends React.PureComponent {
+import CustomPropTypes from 'app/constants/custom_prop_types';
+
+export default class FormattedTime extends React.PureComponent {
     static propTypes = {
-        intl: intlShape.isRequired,
         value: PropTypes.any.isRequired,
-        format: PropTypes.string,
-        children: PropTypes.func
+        timeZone: PropTypes.string,
+        children: PropTypes.func,
+        hour12: PropTypes.bool,
+        style: CustomPropTypes.Style,
+    };
+
+    getFormattedTime = () => {
+        const {
+            value,
+            timeZone,
+            hour12,
+        } = this.props;
+
+        let format = 'H:mm';
+        if (hour12) {
+            const localeFormat = moment.localeData().longDateFormat('LT');
+            format = localeFormat?.includes('A') ? localeFormat : 'h:mm A';
+        }
+
+        if (timeZone) {
+            return moment.tz(value, timeZone).format(format);
+        }
+
+        return moment(value).format(format);
     };
 
     render() {
-        const {
-            intl,
-            value,
-            children,
-            ...props
-        } = this.props;
-
-        Reflect.deleteProperty(props, 'format');
-
-        const formattedTime = intl.formatDate(value, {...props, hour: 'numeric', minute: 'numeric'});
+        const {children, style} = this.props;
+        const formattedTime = this.getFormattedTime();
 
         if (typeof children === 'function') {
             return children(formattedTime);
         }
 
-        return <Text>{formattedTime}</Text>;
+        return <Text style={style}>{formattedTime}</Text>;
     }
 }
-
-export default injectIntl(FormattedTime);

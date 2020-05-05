@@ -1,30 +1,31 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
-import {handleAddChannelMembers} from 'app/actions/views/channel_add_members';
-import {getCurrentChannel} from 'mattermost-redux/selectors/entities/channels';
-import {getMyPreferences, getTheme} from 'mattermost-redux/selectors/entities/preferences';
-import {getCurrentTeam} from 'mattermost-redux/selectors/entities/teams';
-import {getProfilesNotInCurrentChannel} from 'mattermost-redux/selectors/entities/users';
-import {getTeamStats} from 'mattermost-redux/actions/teams';
-import {getProfilesNotInChannel, searchProfiles} from 'mattermost-redux/actions/users';
+import {getTeamStats} from '@mm-redux/actions/teams';
+import {getProfilesNotInChannel, searchProfiles} from '@mm-redux/actions/users';
+import {getCurrentChannel} from '@mm-redux/selectors/entities/channels';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {getCurrentTeamId} from '@mm-redux/selectors/entities/teams';
+import {getCurrentUserId, getProfilesNotInCurrentChannel} from '@mm-redux/selectors/entities/users';
 
+import {handleAddChannelMembers} from 'app/actions/views/channel_add_members';
+import {isLandscape} from 'app/selectors/device';
 import ChannelAddMembers from './channel_add_members';
 
 function mapStateToProps(state) {
+    const currentChannel = getCurrentChannel(state);
+
     return {
+        currentChannelId: currentChannel.id,
+        currentChannelGroupConstrained: currentChannel.group_constrained,
+        currentTeamId: getCurrentTeamId(state),
+        currentUserId: getCurrentUserId(state),
+        profilesNotInChannel: getProfilesNotInCurrentChannel(state),
         theme: getTheme(state),
-        currentChannel: getCurrentChannel(state) || {},
-        membersNotInChannel: getProfilesNotInCurrentChannel(state),
-        currentTeam: getCurrentTeam(state) || {},
-        preferences: getMyPreferences(state),
-        loadMoreRequestStatus: state.requests.users.getProfilesNotInChannel.status,
-        addChannelMemberRequestStatus: state.requests.channels.addChannelMember,
-        searchRequestStatus: state.requests.users.searchProfiles.status,
-        addChannelMemberStatus: state.requests.channels.addChannelMember.status
+        isLandscape: isLandscape(state),
     };
 }
 
@@ -34,8 +35,8 @@ function mapDispatchToProps(dispatch) {
             getTeamStats,
             getProfilesNotInChannel,
             handleAddChannelMembers,
-            searchProfiles
-        }, dispatch)
+            searchProfiles,
+        }, dispatch),
     };
 }
 

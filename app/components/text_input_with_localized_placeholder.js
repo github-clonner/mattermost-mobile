@@ -1,36 +1,50 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
-import {injectIntl, intlShape} from 'react-intl';
+import {intlShape} from 'react-intl';
 import {TextInput} from 'react-native';
 
-class TextInputWithLocalizedPlaceholder extends PureComponent {
+import {changeOpacity} from 'app/utils/theme';
+
+export default class TextInputWithLocalizedPlaceholder extends PureComponent {
     static propTypes = {
         ...TextInput.propTypes,
         placeholder: PropTypes.object.isRequired,
-        intl: intlShape.isRequired
     };
 
+    static defaultProps = {
+        placeholderTextColor: changeOpacity('#000', 0.5),
+    };
+
+    static contextTypes = {
+        intl: intlShape.isRequired,
+    };
+
+    setInputRef = (ref) => {
+        this.inputRef = ref;
+    }
+
     blur = () => {
-        this.refs.input.blur();
+        this.inputRef.blur();
     };
 
     focus = () => {
-        this.refs.input.focus();
+        this.inputRef.focus();
     };
 
     render() {
-        const {intl, placeholder, ...otherProps} = this.props;
+        const {formatMessage} = this.context.intl;
+        const {placeholder, ...otherProps} = this.props;
         let placeholderString = '';
         if (placeholder.id) {
-            placeholderString = intl.formatMessage(placeholder);
+            placeholderString = formatMessage(placeholder);
         }
 
         return (
             <TextInput
-                ref='input'
+                ref={this.setInputRef}
                 {...otherProps}
                 placeholder={placeholderString}
                 disableFullscreenUI={true}
@@ -38,5 +52,3 @@ class TextInputWithLocalizedPlaceholder extends PureComponent {
         );
     }
 }
-
-export default injectIntl(TextInputWithLocalizedPlaceholder, {withRef: true});

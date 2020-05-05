@@ -1,60 +1,81 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
-import {SectionList} from 'react-native';
+import {Platform, SectionList} from 'react-native';
 
-import {RequestStatus} from 'mattermost-redux/constants';
+import {RequestStatus} from '@mm-redux/constants';
+import {isMinimumServerVersion} from '@mm-redux/utils/helpers';
+import {debounce} from '@mm-redux/actions/helpers';
 
 import {CHANNEL_MENTION_REGEX, CHANNEL_MENTION_SEARCH_REGEX} from 'app/constants/autocomplete';
-import AutocompleteDivider from 'app/components/autocomplete/autocomplete_divider';
 import AutocompleteSectionHeader from 'app/components/autocomplete/autocomplete_section_header';
 import ChannelMentionItem from 'app/components/autocomplete/channel_mention_item';
 import {makeStyleSheetFromTheme} from 'app/utils/theme';
+import {t} from 'app/utils/i18n';
 
 export default class ChannelMention extends PureComponent {
     static propTypes = {
         actions: PropTypes.shape({
-            searchChannels: PropTypes.func.isRequired
+            searchChannels: PropTypes.func.isRequired,
+            autocompleteChannelsForSearch: PropTypes.func.isRequired,
         }).isRequired,
         currentTeamId: PropTypes.string.isRequired,
         cursorPosition: PropTypes.number.isRequired,
         isSearch: PropTypes.bool,
-        listHeight: PropTypes.number,
         matchTerm: PropTypes.string,
+        maxListHeight: PropTypes.number,
         myChannels: PropTypes.array,
+        myMembers: PropTypes.object,
         otherChannels: PropTypes.array,
         onChangeText: PropTypes.func.isRequired,
         onResultCountChange: PropTypes.func.isRequired,
         privateChannels: PropTypes.array,
         publicChannels: PropTypes.array,
+        directAndGroupMessages: PropTypes.array,
         requestStatus: PropTypes.string.isRequired,
         theme: PropTypes.object.isRequired,
-        value: PropTypes.string
+        value: PropTypes.string,
+        serverVersion: PropTypes.string,
+        isLandscape: PropTypes.bool.isRequired,
+        nestedScrollEnabled: PropTypes.bool,
     };
 
     static defaultProps = {
         isSearch: false,
-        value: ''
+        value: '',
+        publicChannels: [],
+        privateChannels: [],
+        directAndGroupMessages: [],
+        myChannels: [],
+        otherChannels: [],
     };
 
     constructor(props) {
         super(props);
 
         this.state = {
-            sections: []
+            sections: [],
         };
     }
 
+    runSearch = debounce((currentTeamId, matchTerm) => {
+        if (isMinimumServerVersion(this.props.serverVersion, 5, 4)) {
+            this.props.actions.autocompleteChannelsForSearch(currentTeamId, matchTerm);
+            return;
+        }
+        this.props.actions.searchChannels(currentTeamId, matchTerm);
+    }, 200);
+
     componentWillReceiveProps(nextProps) {
-        const {isSearch, matchTerm, myChannels, otherChannels, privateChannels, publicChannels, requestStatus} = nextProps;
+        const {isSearch, matchTerm, myChannels, otherChannels, privateChannels, publicChannels, directAndGroupMessages, requestStatus, myMembers} = nextProps;
 
         if ((matchTerm !== this.props.matchTerm && matchTerm === null) || this.state.mentionComplete) {
             // if the term changes but is null or the mention has been completed we render this component as null
             this.setState({
                 mentionComplete: false,
-                sections: []
+                sections: [],
             });
 
             this.props.onResultCountChange(0);
@@ -66,59 +87,68 @@ export default class ChannelMention extends PureComponent {
         }
 
         if (matchTerm !== this.props.matchTerm) {
-            // if the term changed and we haven't made the request do that first
             const {currentTeamId} = this.props;
-            this.props.actions.searchChannels(currentTeamId, matchTerm);
-            return;
+            this.runSearch(currentTeamId, matchTerm);
         }
 
-        if (requestStatus !== RequestStatus.STARTED &&
-            (myChannels !== this.props.myChannels || otherChannels !== this.props.otherChannels ||
-                privateChannels !== this.props.privateChannels || publicChannels !== this.props.publicChannels)) {
-            // if the request is complete and the term is not null we show the autocomplete
+        if (matchTerm === '' || (myChannels !== this.props.myChannels || otherChannels !== this.props.otherChannels ||
+        privateChannels !== this.props.privateChannels || publicChannels !== this.props.publicChannels ||
+        directAndGroupMessages !== this.props.directAndGroupMessages ||
+        myMembers !== this.props.myMembers)) {
             const sections = [];
             if (isSearch) {
                 if (publicChannels.length) {
                     sections.push({
-                        id: 'suggestion.search.public',
+                        id: t('suggestion.search.public'),
                         defaultMessage: 'Public Channels',
-                        data: publicChannels,
-                        key: 'publicChannels'
+                        data: publicChannels.filter((cId) => myMembers[cId]),
+                        key: 'publicChannels',
+                        hideLoadingIndicator: true,
                     });
                 }
 
                 if (privateChannels.length) {
                     sections.push({
-                        id: 'suggestion.search.private',
+                        id: t('suggestion.search.private'),
                         defaultMessage: 'Private Channels',
                         data: privateChannels,
-                        key: 'privateChannels'
+                        key: 'privateChannels',
+                        hideLoadingIndicator: true,
+                    });
+                }
+
+                if (directAndGroupMessages.length && isMinimumServerVersion(this.props.serverVersion, 5, 4)) {
+                    sections.push({
+                        id: t('suggestion.search.direct'),
+                        defaultMessage: 'Direct Messages',
+                        data: directAndGroupMessages,
+                        key: 'directAndGroupMessages',
                     });
                 }
             } else {
                 if (myChannels.length) {
                     sections.push({
-                        id: 'suggestion.mention.channels',
+                        id: t('suggestion.mention.channels'),
                         defaultMessage: 'My Channels',
                         data: myChannels,
-                        key: 'myChannels'
+                        key: 'myChannels',
+                        hideLoadingIndicator: true,
                     });
                 }
 
-                if (otherChannels.length) {
+                if (otherChannels.length || requestStatus === RequestStatus.STARTED) {
                     sections.push({
-                        id: 'suggestion.mention.morechannels',
+                        id: t('suggestion.mention.morechannels'),
                         defaultMessage: 'Other Channels',
                         data: otherChannels,
-                        key: 'otherChannels'
+                        key: 'otherChannels',
                     });
                 }
             }
 
             this.setState({
-                sections
+                sections,
             });
-
             this.props.onResultCountChange(sections.reduce((total, section) => total + section.data.length, 0));
         }
     }
@@ -131,6 +161,10 @@ export default class ChannelMention extends PureComponent {
         if (isSearch) {
             const channelOrIn = mentionPart.includes('in:') ? 'in:' : 'channel:';
             completedDraft = mentionPart.replace(CHANNEL_MENTION_SEARCH_REGEX, `${channelOrIn} ${mention} `);
+        } else if (Platform.OS === 'ios') {
+            // We are going to set a double ~ on iOS to prevent the auto correct from taking over and replacing it
+            // with the wrong value, this is a hack but I could not found another way to solve it
+            completedDraft = mentionPart.replace(CHANNEL_MENTION_REGEX, `~~${mention} `);
         } else {
             completedDraft = mentionPart.replace(CHANNEL_MENTION_REGEX, `~${mention} `);
         }
@@ -140,6 +174,14 @@ export default class ChannelMention extends PureComponent {
         }
 
         onChangeText(completedDraft, true);
+
+        if (Platform.OS === 'ios') {
+            // This is the second part of the hack were we replace the double ~ with just one
+            // after the auto correct vanished
+            setTimeout(() => {
+                onChangeText(completedDraft.replace(`~~${mention} `, `~${mention} `));
+            });
+        }
         this.setState({mentionComplete: true});
     };
 
@@ -152,7 +194,9 @@ export default class ChannelMention extends PureComponent {
             <AutocompleteSectionHeader
                 id={section.id}
                 defaultMessage={section.defaultMessage}
+                loading={!section.hideLoadingIndicator && this.props.requestStatus === RequestStatus.STARTED}
                 theme={this.props.theme}
+                isLandscape={this.props.isLandscape}
             />
         );
     };
@@ -167,7 +211,7 @@ export default class ChannelMention extends PureComponent {
     };
 
     render() {
-        const {isSearch, listHeight, theme} = this.props;
+        const {maxListHeight, theme, nestedScrollEnabled} = this.props;
         const {mentionComplete, sections} = this.state;
 
         if (sections.length === 0 || mentionComplete) {
@@ -182,12 +226,12 @@ export default class ChannelMention extends PureComponent {
             <SectionList
                 keyboardShouldPersistTaps='always'
                 keyExtractor={this.keyExtractor}
-                style={[style.listView, isSearch ? [style.search, {height: listHeight}] : null]}
+                style={[style.listView, {maxHeight: maxListHeight}]}
                 sections={sections}
                 renderItem={this.renderItem}
                 renderSectionHeader={this.renderSectionHeader}
-                ItemSeparatorComponent={AutocompleteDivider}
                 initialNumToRender={10}
+                nestedScrollEnabled={nestedScrollEnabled}
             />
         );
     }
@@ -196,10 +240,7 @@ export default class ChannelMention extends PureComponent {
 const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
     return {
         listView: {
-            backgroundColor: theme.centerChannelBg
+            backgroundColor: theme.centerChannelBg,
         },
-        search: {
-            minHeight: 125
-        }
     };
 });

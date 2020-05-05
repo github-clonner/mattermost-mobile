@@ -1,13 +1,13 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React from 'react';
 import {
-    View
+    View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
 
-import {Preferences} from 'mattermost-redux/constants';
+import {Preferences} from '@mm-redux/constants';
 import {makeStyleSheetFromTheme} from 'app/utils/theme';
 
 const defaultTheme = Preferences.THEMES.default;
@@ -61,12 +61,12 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
         container: {
             height: 16,
             marginRight: 5,
-            width: 16
+            width: 16,
         },
         icon: {
             color: theme.centerChannelColor,
-            fontSize: 16
-        }
+            fontSize: 16,
+        },
     };
 });
 

@@ -1,14 +1,15 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
-import {getCurrentChannel} from 'mattermost-redux/selectors/entities/channels';
-import {getCurrentTeamUrl} from 'mattermost-redux/selectors/entities/teams';
-import {patchChannel} from 'mattermost-redux/actions/channels';
+import {getCurrentChannel} from '@mm-redux/selectors/entities/channels';
+import {getCurrentTeamUrl} from '@mm-redux/selectors/entities/teams';
+import {patchChannel, getChannel} from '@mm-redux/actions/channels';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
 
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
+import {setChannelDisplayName} from 'app/actions/views/channel';
 import {getDimensions} from 'app/selectors/device';
 
 import EditChannel from './edit_channel';
@@ -24,15 +25,17 @@ function mapStateToProps(state) {
         updateChannelRequest,
         theme: getTheme(state),
         deviceWidth,
-        deviceHeight
+        deviceHeight,
     };
 }
 
 function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
-            patchChannel
-        }, dispatch)
+            patchChannel,
+            getChannel,
+            setChannelDisplayName,
+        }, dispatch),
     };
 }
 

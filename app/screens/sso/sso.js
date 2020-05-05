@@ -1,117 +1,115 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {injectIntl, intlShape} from 'react-intl';
 import {
-    InteractionManager,
-    Platform,
     Text,
     View,
-    WebView
+    Platform,
 } from 'react-native';
+import {WebView} from 'react-native-webview';
 import CookieManager from 'react-native-cookies';
+import urlParse from 'url-parse';
 
-import {Client4} from 'mattermost-redux/client';
+import {Client4} from '@mm-redux/client';
 
 import {ViewTypes} from 'app/constants';
 import Loading from 'app/components/loading';
+import {paddingHorizontal as padding} from 'app/components/safe_area_view/iphone_x_spacing';
 import StatusBar from 'app/components/status_bar';
-import PushNotifications from 'app/push_notifications';
+import {resetToChannel} from 'app/actions/navigation';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
 import tracker from 'app/utils/time_tracker';
 
-const postMessageJS = "setTimeout(function() { postMessage(document.body.innerText, '*')});";
+const HEADERS = {
+    'X-Mobile-App': 'mattermost',
+};
+
+const postMessageJS = "window.postMessage(document.body.innerText, '*');";
 
 // Used to make sure that OneLogin forms scale appropriately on both platforms.
 const oneLoginFormScalingJS = `
     (function() {
-        document.getElementById('login-page').setAttribute('style', 'background-repeat: repeat-y;');
+        var loginPage = document.getElementById('login-page');
         var submitButton = document.getElementById('user_submit');
-        function resetPadding() {
-            document.getElementById('body-main').setAttribute('style', 'height: auto; padding: 10px 0;');
-            submitButton.removeEventListener('click', resetPadding);
+
+        if (loginPage) {
+            loginPage.setAttribute('style', 'background-repeat: repeat-y;');
         }
+        
+        function resetPadding() {
+            var mainBody = document.getElementById('body-main');
+            
+            if (mainBody) {
+                mainBody.setAttribute('style', 'height: auto; padding: 10px 0;');
+            }
+
+            if (submitButton) {
+                submitButton.removeEventListener('click', resetPadding);
+            }
+        }
+
         resetPadding();
-        submitButton.addEventListener('click', resetPadding);
+        
+        if (submitButton) {
+            submitButton.addEventListener('click', resetPadding);
+        }
     })();
 `;
 
 class SSO extends PureComponent {
     static propTypes = {
+        actions: PropTypes.shape({
+            scheduleExpiredNotification: PropTypes.func.isRequired,
+            ssoLogin: PropTypes.func.isRequired,
+        }).isRequired,
         intl: intlShape.isRequired,
-        navigator: PropTypes.object,
-        theme: PropTypes.object,
+        isLandscape: PropTypes.bool.isRequired,
         serverUrl: PropTypes.string.isRequired,
         ssoType: PropTypes.string.isRequired,
-        actions: PropTypes.shape({
-            getSession: PropTypes.func.isRequired,
-            handleSuccessfulLogin: PropTypes.func.isRequired,
-            setStoreFromLocalData: PropTypes.func.isRequired
-        }).isRequired
+        theme: PropTypes.object,
     };
+
+    useWebkit = true;
 
     constructor(props) {
         super(props);
 
         this.state = {
             error: null,
-            renderWebView: false,
-            onMessage: props.ssoType === ViewTypes.GITLAB ? this.onMessage : null,
-            jsCode: postMessageJS,
-            scalePagesToFit: false
+            renderWebView: true,
+            jsCode: '',
+            messagingEnabled: false,
         };
 
         switch (props.ssoType) {
         case ViewTypes.GITLAB:
             this.loginUrl = `${props.serverUrl}/oauth/gitlab/mobile_login`;
-            this.completedUrl = `${props.serverUrl}/signup/gitlab/complete`;
+            this.completedUrl = '/signup/gitlab/complete';
             break;
         case ViewTypes.SAML:
             this.loginUrl = `${props.serverUrl}/login/sso/saml?action=mobile`;
             this.completedUrl = '/login/sso/saml';
             break;
+        case ViewTypes.OFFICE365:
+            this.loginUrl = `${props.serverUrl}/oauth/office365/mobile_login`;
+            this.completedUrl = '/signup/office365/complete';
+            break;
+        }
+
+        if (Platform.OS === 'ios') {
+            this.useWebkit = parseInt(Platform.Version, 10) >= 11;
         }
     }
 
-    componentDidMount() {
-        InteractionManager.runAfterInteractions(() => {
-            this.setState({renderWebView: true});
-        });
-    }
-
-    goToLoadTeam = (expiresAt) => {
-        const {intl, navigator} = this.props;
+    goToChannel = () => {
         tracker.initialLoad = Date.now();
 
-        if (expiresAt) {
-            PushNotifications.localNotificationSchedule({
-                date: new Date(expiresAt),
-                message: intl.formatMessage({
-                    id: 'mobile.session_expired',
-                    defaultMessage: 'Session Expired: Please log in to continue receiving notifications.'
-                }),
-                userInfo: {
-                    localNotification: true
-                }
-            });
-        }
+        this.scheduleSessionExpiredNotification();
 
-        navigator.resetTo({
-            screen: 'Channel',
-            title: '',
-            animated: false,
-            backButtonTitle: '',
-            navigatorStyle: {
-                animated: true,
-                animationType: 'fade',
-                navBarHidden: true,
-                statusBarHidden: false,
-                statusBarHideWithNavBar: false,
-                screenBackgroundColor: 'transparent'
-            }
-        });
+        resetToChannel();
     };
 
     onMessage = (event) => {
@@ -121,7 +119,7 @@ class SSO extends PureComponent {
                 const {
                     id,
                     message,
-                    status_code: statusCode
+                    status_code: statusCode,
                 } = response;
                 if (id && message && statusCode !== 200) {
                     this.setState({error: message});
@@ -133,62 +131,72 @@ class SSO extends PureComponent {
     };
 
     onNavigationStateChange = (navState) => {
-        const {url, navigationType, loading} = navState;
-        let submitted = false;
-        if (Platform.OS === 'ios') {
-            submitted = url.includes(this.completedUrl) && navigationType === 'formsubmit';
-        } else {
-            submitted = url.includes(this.completedUrl) && loading;
+        const {url} = navState;
+        const nextState = {
+            messagingEnabled: false,
+        };
+        const parsed = urlParse(url);
+
+        if (parsed.host.includes('.onelogin.com')) {
+            nextState.jsCode = oneLoginFormScalingJS;
+        } else if (parsed.pathname === this.completedUrl) {
+            // To avoid `window.postMessage` conflicts in any of the SSO flows
+            // we enable the onMessage handler only When the webView navigates to the final SSO URL.
+            nextState.messagingEnabled = true;
         }
 
-        const nextState = {};
-
-        if (url.includes('.onelogin.com')) {
-            nextState.jsCode = `${oneLoginFormScalingJS}${postMessageJS}`;
-            nextState.scalePagesToFit = true;
-        }
-
-        if (submitted) {
-            nextState.onMessage = this.onMessage;
-        }
-
-        if (Object.keys(nextState).length) {
-            this.setState(nextState);
-        }
+        this.setState(nextState);
     };
 
     onLoadEnd = (event) => {
         const url = event.nativeEvent.url;
-
         if (url.includes(this.completedUrl)) {
-            CookieManager.get(this.props.serverUrl).then((res) => {
+            CookieManager.get(this.props.serverUrl, this.useWebkit).then((res) => {
                 const token = res.MMAUTHTOKEN;
 
                 if (token) {
                     this.setState({renderWebView: false});
                     const {
-                        getSession,
-                        handleSuccessfulLogin,
-                        setStoreFromLocalData
+                        ssoLogin,
                     } = this.props.actions;
 
                     Client4.setToken(token);
-                    setStoreFromLocalData({url: this.props.serverUrl, token}).
-                        then(handleSuccessfulLogin).
-                        then(getSession).
-                        then(this.goToLoadTeam);
+                    ssoLogin(token).then((result) => {
+                        if (result.error) {
+                            this.onLoadEndError(result.error);
+                            return;
+                        }
+                        this.goToChannel();
+                    });
+                } else if (this.webView && !this.state.error) {
+                    this.webView.injectJavaScript(postMessageJS);
                 }
             });
         }
+    };
+
+    onLoadEndError = (e) => {
+        console.warn('Failed to set store from local data', e); // eslint-disable-line no-console
+        this.setState({error: e.message});
+    };
+
+    scheduleSessionExpiredNotification = () => {
+        const {actions, intl} = this.props;
+
+        actions.scheduleExpiredNotification(intl);
     };
 
     renderLoading = () => {
         return <Loading/>;
     };
 
+    webViewRef = (ref) => {
+        this.webView = ref;
+    };
+
     render() {
-        const {theme} = this.props;
-        const {error, renderWebView, onMessage, jsCode, scalePagesToFit} = this.state;
+        const {theme, isLandscape} = this.props;
+        const {error, messagingEnabled, renderWebView, jsCode} = this.state;
         const style = getStyleSheet(theme);
 
         let content;
@@ -203,23 +211,24 @@ class SSO extends PureComponent {
         } else {
             content = (
                 <WebView
-                    source={{uri: this.loginUrl}}
+                    ref={this.webViewRef}
+                    source={{uri: this.loginUrl, headers: HEADERS}}
                     javaScriptEnabledAndroid={true}
                     automaticallyAdjustContentInsets={false}
-                    scalesPageToFit={scalePagesToFit}
                     startInLoadingState={true}
                     onNavigationStateChange={this.onNavigationStateChange}
                     onShouldStartLoadWithRequest={() => true}
-                    renderLoading={this.renderLoading}
-                    onMessage={onMessage}
                     injectedJavaScript={jsCode}
                     onLoadEnd={this.onLoadEnd}
+                    onMessage={messagingEnabled ? this.onMessage : null}
+                    useSharedProcessPool={true}
+                    cacheEnabled={false}
                 />
             );
         }
 
         return (
-            <View style={{flex: 1}}>
+            <View style={[style.container, padding(isLandscape)]}>
                 <StatusBar/>
                 {content}
             </View>
@@ -229,18 +238,21 @@ class SSO extends PureComponent {
 
 const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
+        container: {
+            flex: 1,
+        },
         errorContainer: {
             alignItems: 'center',
             flex: 1,
-            marginTop: 40
+            marginTop: 40,
         },
         errorText: {
             color: changeOpacity(theme.centerChannelColor, 0.4),
             fontSize: 16,
             fontWeight: '400',
             lineHeight: 23,
-            paddingHorizontal: 30
-        }
+            paddingHorizontal: 30,
+        },
     };
 });
 

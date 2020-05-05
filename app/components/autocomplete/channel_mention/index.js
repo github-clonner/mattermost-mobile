@@ -1,20 +1,23 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
-import {searchChannels} from 'mattermost-redux/actions/channels';
-import {getCurrentTeamId} from 'mattermost-redux/selectors/entities/teams';
+import {searchChannels, autocompleteChannelsForSearch} from '@mm-redux/actions/channels';
+import {getMyChannelMemberships} from '@mm-redux/selectors/entities/channels';
+import {getCurrentTeamId} from '@mm-redux/selectors/entities/teams';
+import {isLandscape} from 'app/selectors/device';
 
 import {
     filterMyChannels,
     filterOtherChannels,
     filterPublicChannels,
     filterPrivateChannels,
-    getMatchTermForChannelMention
+    filterDirectAndGroupMessages,
+    getMatchTermForChannelMention,
 } from 'app/selectors/autocomplete';
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
 
 import ChannelMention from './channel_mention';
 
@@ -28,9 +31,11 @@ function mapStateToProps(state, ownProps) {
     let otherChannels;
     let publicChannels;
     let privateChannels;
+    let directAndGroupMessages;
     if (isSearch) {
         publicChannels = filterPublicChannels(state, matchTerm);
         privateChannels = filterPrivateChannels(state, matchTerm);
+        directAndGroupMessages = filterDirectAndGroupMessages(state, matchTerm);
     } else {
         myChannels = filterMyChannels(state, matchTerm);
         otherChannels = filterOtherChannels(state, matchTerm);
@@ -38,21 +43,26 @@ function mapStateToProps(state, ownProps) {
 
     return {
         myChannels,
+        myMembers: getMyChannelMemberships(state),
         otherChannels,
         publicChannels,
         privateChannels,
+        directAndGroupMessages,
         currentTeamId: getCurrentTeamId(state),
         matchTerm,
         requestStatus: state.requests.channels.getChannels.status,
-        theme: getTheme(state)
+        theme: getTheme(state),
+        serverVersion: state.entities.general.serverVersion,
+        isLandscape: isLandscape(state),
     };
 }
 
 function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
-            searchChannels
-        }, dispatch)
+            searchChannels,
+            autocompleteChannelsForSearch,
+        }, dispatch),
     };
 }
 

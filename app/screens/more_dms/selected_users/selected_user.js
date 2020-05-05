@@ -1,18 +1,18 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import PropTypes from 'prop-types';
 import React from 'react';
 import {
     Text,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
 
-import {displayUsername} from 'mattermost-redux/utils/user_utils';
+import {displayUsername} from '@mm-redux/utils/user_utils';
 
 export default class SelectedUser extends React.PureComponent {
     static propTypes = {
@@ -35,7 +35,7 @@ export default class SelectedUser extends React.PureComponent {
         /*
          * A handler function that will deselect a user when clicked on.
          */
-        onRemove: PropTypes.func.isRequired
+        onRemove: PropTypes.func.isRequired,
     };
 
     onRemove = () => {
@@ -73,17 +73,16 @@ const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
             height: 27,
             borderRadius: 3,
             backgroundColor: changeOpacity(theme.centerChannelColor, 0.2),
-            marginBottom: 2,
+            marginBottom: 4,
             marginRight: 10,
-            marginTop: 10,
-            paddingLeft: 10
+            paddingLeft: 10,
         },
         remove: {
-            paddingHorizontal: 10
+            paddingHorizontal: 10,
         },
         text: {
             color: theme.centerChannelColor,
-            fontSize: 13
-        }
+            fontSize: 13,
+        },
     };
 });

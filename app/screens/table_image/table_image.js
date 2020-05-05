@@ -1,43 +1,50 @@
-// Copyright (c) 2018-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import PropTypes from 'prop-types';
 import React from 'react';
 import {
     ActivityIndicator,
-    Image,
     ScrollView,
     StyleSheet,
-    View
+    View,
 } from 'react-native';
+import FastImage from 'react-native-fast-image';
 
 export default class TableImage extends React.PureComponent {
     static propTypes = {
         deviceWidth: PropTypes.number.isRequired,
-        imageSource: PropTypes.string.isRequired
+        imageSource: PropTypes.string.isRequired,
     };
 
     constructor(props) {
         super(props);
 
         this.state = {
+            imageSource: '',
             width: -1,
-            height: -1
+            height: -1,
         };
     }
 
-    componentWillMount() {
+    componentDidMount() {
         this.getImageSize(this.props.imageSource);
     }
 
-    componentWillReceiveProps(nextProps) {
-        if (this.props.imageSource !== nextProps.imageSource) {
-            this.setState({
+    static getDerivedStateFromProps(nextProps, state) {
+        if (nextProps.imageSource !== state.imageSource) {
+            return {
                 width: -1,
-                height: -1
-            });
+                height: -1,
+            };
+        }
 
-            this.getImageSize(nextProps.imageSource);
+        return null;
+    }
+
+    componentDidUpdate(prevProps) {
+        if (prevProps.imageSource !== this.props.imageSource) {
+            this.getImageSize(this.props.imageSource);
         }
     }
 
@@ -45,7 +52,7 @@ export default class TableImage extends React.PureComponent {
         Image.getSize(imageSource, (width, height) => {
             this.setState({
                 width,
-                height
+                height,
             });
         });
     }
@@ -74,7 +81,7 @@ export default class TableImage extends React.PureComponent {
                 style={style.scrollContainer}
                 contentContainerStyle={style.container}
             >
-                <Image
+                <FastImage
                     style={[style.image, {width, height}]}
                     source={{uri: this.props.imageSource}}
                 />
@@ -85,18 +92,18 @@ export default class TableImage extends React.PureComponent {
 
 const style = StyleSheet.create({
     scrollContainer: {
-        flex: 1
+        flex: 1,
     },
     container: {
         flex: 1,
-        flexDirection: 'column'
+        flexDirection: 'column',
     },
     image: {
-        resizeMode: 'contain'
+        resizeMode: 'contain',
     },
     loadingContainer: {
         alignItems: 'center',
         flex: 1,
-        justifyContent: 'center'
-    }
+        justifyContent: 'center',
+    },
 });

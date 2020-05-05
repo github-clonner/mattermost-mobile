@@ -1,15 +1,15 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {connect} from 'react-redux';
 import {createSelector} from 'reselect';
 
-import {General, RequestStatus} from 'mattermost-redux/constants';
-import {makeGetChannel} from 'mattermost-redux/selectors/entities/channels';
-import {getCurrentUserId, getUser, makeGetProfilesInChannel} from 'mattermost-redux/selectors/entities/users';
+import {General} from '@mm-redux/constants';
+import {makeGetChannel} from '@mm-redux/selectors/entities/channels';
+import {getCurrentUserId, getUser, makeGetProfilesInChannel} from '@mm-redux/selectors/entities/users';
 
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
-
+import {getTeammateNameDisplaySetting, getTheme} from '@mm-redux/selectors/entities/preferences';
+import {isLandscape} from 'app/selectors/device';
 import {getChannelMembersForDm} from 'app/selectors/channel';
 
 import ChannelIntro from './channel_intro';
@@ -24,16 +24,14 @@ function makeMapStateToProps() {
         (currentUserId, profilesInChannel) => {
             const currentChannelMembers = profilesInChannel || [];
             return currentChannelMembers.filter((m) => m.id !== currentUserId);
-        }
+        },
     );
 
     return function mapStateToProps(state, ownProps) {
         const currentChannel = getChannel(state, {id: ownProps.channelId}) || {};
-        const {status: getPostsRequestStatus} = state.requests.posts.getPosts;
 
         let currentChannelMembers;
         let creator;
-        let postsInChannel;
 
         if (currentChannel) {
             if (currentChannel.type === General.DM_CHANNEL) {
@@ -43,15 +41,15 @@ function makeMapStateToProps() {
             }
 
             creator = getUser(state, currentChannel.creator_id);
-            postsInChannel = state.entities.posts.postsInChannel[currentChannel.Id];
         }
 
         return {
             creator,
             currentChannel,
             currentChannelMembers,
-            isLoadingPosts: (!postsInChannel || postsInChannel.length === 0) && getPostsRequestStatus === RequestStatus.STARTED,
-            theme: getTheme(state)
+            theme: getTheme(state),
+            isLandscape: isLandscape(state),
+            teammateNameDisplay: getTeammateNameDisplaySetting(state),
         };
     };
 }

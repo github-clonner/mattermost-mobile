@@ -1,59 +1,78 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
+import {Navigation} from 'react-native-navigation';
 import PropTypes from 'prop-types';
-import {injectIntl, intlShape} from 'react-intl';
+import {intlShape} from 'react-intl';
 import {
     ActivityIndicator,
+    DeviceEventEmitter,
     Image,
     Keyboard,
     KeyboardAvoidingView,
     Platform,
+    SafeAreaView,
     StatusBar,
     StyleSheet,
     Text,
+    TextInput,
     TouchableWithoutFeedback,
-    View
+    View,
 } from 'react-native';
 import Button from 'react-native-button';
-import urlParse from 'url-parse';
+import RNFetchBlob from 'rn-fetch-blob';
 
-import {Client4} from 'mattermost-redux/client';
+import merge from 'deepmerge';
 
-import Config from 'assets/config';
+import {Client4} from '@mm-redux/client';
+
 import ErrorText from 'app/components/error_text';
 import FormattedText from 'app/components/formatted_text';
-import TextInputWithLocalizedPlaceholder from 'app/components/text_input_with_localized_placeholder';
+import fetchConfig from 'app/init/fetch';
+import mattermostBucket from 'app/mattermost_bucket';
 import {GlobalStyles} from 'app/styles';
-import {wrapWithPreventDoubleTap} from 'app/utils/tap';
+import {checkUpgradeType, isUpgradeAvailable} from 'app/utils/client_upgrade';
 import {isValidUrl, stripTrailingSlashes} from 'app/utils/url';
-import {UpgradeTypes} from 'app/constants/view';
-import checkUpgradeType from 'app/utils/client_upgrade';
+import {preventDoubleTap} from 'app/utils/tap';
+import tracker from 'app/utils/time_tracker';
+import {t} from 'app/utils/i18n';
+import {changeOpacity} from 'app/utils/theme';
+import {resetToChannel, goToScreen} from 'app/actions/navigation';
 
-import logo from 'assets/images/logo.png';
+import telemetry from 'app/telemetry';
 
-class SelectServer extends PureComponent {
+import LocalConfig from 'assets/config';
+
+export default class SelectServer extends PureComponent {
     static propTypes = {
         actions: PropTypes.shape({
             getPing: PropTypes.func.isRequired,
             handleServerUrlChanged: PropTypes.func.isRequired,
+            handleSuccessfulLogin: PropTypes.func.isRequired,
+            scheduleExpiredNotification: PropTypes.func.isRequired,
             loadConfigAndLicense: PropTypes.func.isRequired,
+            login: PropTypes.func.isRequired,
             resetPing: PropTypes.func.isRequired,
             setLastUpgradeCheck: PropTypes.func.isRequired,
-            setServerVersion: PropTypes.func.isRequired
+            setServerVersion: PropTypes.func.isRequired,
         }).isRequired,
         allowOtherServers: PropTypes.bool,
         config: PropTypes.object,
         currentVersion: PropTypes.string,
         hasConfigAndLicense: PropTypes.bool.isRequired,
-        intl: intlShape.isRequired,
         latestVersion: PropTypes.string,
         license: PropTypes.object,
         minVersion: PropTypes.string,
-        navigator: PropTypes.object,
         serverUrl: PropTypes.string.isRequired,
-        theme: PropTypes.object
+    };
+
+    static defaultProps = {
+        allowOtherServers: true,
+    };
+
+    static contextTypes = {
+        intl: intlShape.isRequired,
     };
 
     constructor(props) {
@@ -63,40 +82,45 @@ class SelectServer extends PureComponent {
             connected: false,
             connecting: false,
             error: null,
-            url: props.serverUrl
+            url: props.serverUrl,
         };
 
         this.cancelPing = null;
     }
 
     componentDidMount() {
+        this.navigationEventListener = Navigation.events().bindComponent(this);
+
         const {allowOtherServers, serverUrl} = this.props;
         if (!allowOtherServers && serverUrl) {
             // If the app is managed or AutoSelectServerUrl is true in the Config, the server url is set and the user can't change it
             // we automatically trigger the ping to move to the next screen
-            this.onClick();
+            this.handleConnect();
         }
 
         if (Platform.OS === 'android') {
             Keyboard.addListener('keyboardDidHide', this.handleAndroidKeyboard);
         }
 
-        this.props.navigator.setOnNavigatorEvent(this.handleNavigatorEvent);
+        this.certificateListener = DeviceEventEmitter.addListener('RNFetchBlobCertificate', this.selectCertificate);
+
+        telemetry.end(['start:select_server_screen']);
+        telemetry.save();
     }
 
-    componentWillUpdate(nextProps, nextState) {
-        if (nextState.connected && nextProps.hasConfigAndLicense && !(this.state.connected && this.props.hasConfigAndLicense)) {
-            if (Config.EnableMobileClientUpgrade) {
+    componentDidUpdate(prevProps, prevState) {
+        if (this.state.connected && this.props.hasConfigAndLicense && !(prevState.connected && prevProps.hasConfigAndLicense)) {
+            if (LocalConfig.EnableMobileClientUpgrade) {
                 this.props.actions.setLastUpgradeCheck();
-                const {currentVersion, minVersion, latestVersion} = nextProps;
+                const {currentVersion, minVersion, latestVersion} = this.props;
                 const upgradeType = checkUpgradeType(currentVersion, minVersion, latestVersion);
-                if (upgradeType === UpgradeTypes.NO_UPGRADE) {
-                    this.handleLoginOptions(nextProps);
-                } else {
+                if (isUpgradeAvailable(upgradeType)) {
                     this.handleShowClientUpgrade(upgradeType);
+                } else {
+                    this.handleLoginOptions(this.props);
                 }
             } else {
-                this.handleLoginOptions(nextProps);
+                this.handleLoginOptions(this.props);
             }
         }
     }
@@ -105,87 +129,65 @@ class SelectServer extends PureComponent {
         if (Platform.OS === 'android') {
             Keyboard.removeListener('keyboardDidHide', this.handleAndroidKeyboard);
         }
+
+        this.certificateListener.remove();
+
+        this.navigationEventListener.remove();
     }
 
-    handleNavigatorEvent = (event) => {
-        if (event.id === 'didDisappear') {
-            this.setState({
-                connected: false
-            });
+    componentDidDisappear() {
+        this.setState({
+            connected: false,
+        });
+    }
+
+    blur = () => {
+        if (this.textInput) {
+            this.textInput.blur();
         }
     };
 
-    handleShowClientUpgrade = (upgradeType) => {
-        const {intl, theme} = this.props;
+    getUrl = () => {
+        const urlParse = require('url-parse');
+        let preUrl = urlParse(this.state.url, true);
 
-        this.props.navigator.push({
-            screen: 'ClientUpgrade',
-            title: intl.formatMessage({id: 'mobile.client_upgrade', defaultMessage: 'Client Upgrade'}),
-            backButtonTitle: '',
-            navigatorStyle: {
-                navBarHidden: false,
-                disabledBackGesture: Config.AutoSelectServerUrl,
-                statusBarHidden: true,
-                statusBarHideWithNavBar: true,
-                navBarTextColor: theme.sidebarHeaderTextColor,
-                navBarBackgroundColor: theme.sidebarHeaderBg,
-                navBarButtonColor: theme.sidebarHeaderTextColor
+        if (!preUrl.host || preUrl.protocol === 'file:') {
+            preUrl = urlParse('https://' + stripTrailingSlashes(this.state.url), true);
+        }
+
+        if (preUrl.protocol === 'http:') {
+            preUrl.protocol = 'https:';
+        }
+
+        return stripTrailingSlashes(preUrl.protocol + '//' + preUrl.host + preUrl.pathname);
+    };
+
+    goToNextScreen = (screen, title, passProps = {}, navOptions = {}) => {
+        const {allowOtherServers} = this.props;
+        let visible = !LocalConfig.AutoSelectServerUrl;
+
+        if (!allowOtherServers) {
+            visible = false;
+        }
+
+        const defaultOptions = {
+            popGesture: visible,
+            topBar: {
+                visible,
+                height: visible ? null : 0,
             },
-            passProps: {
-                closeAction: () => this.handleLoginOptions(this.props),
-                upgradeType
-            }
-        });
-    }
+        };
+        const options = merge(defaultOptions, navOptions);
 
-    handleLoginOptions = (props) => {
-        const {config, intl, license, theme} = props;
-        const samlEnabled = config.EnableSaml === 'true' && license.IsLicensed === 'true' && license.SAML === 'true';
-        const gitlabEnabled = config.EnableSignUpWithGitLab === 'true';
-
-        let options = 0;
-        if (samlEnabled || gitlabEnabled) {
-            options += 1;
-        }
-
-        let screen;
-        let title;
-        if (options) {
-            screen = 'LoginOptions';
-            title = intl.formatMessage({id: 'mobile.routes.loginOptions', defaultMessage: 'Login Chooser'});
-        } else {
-            screen = 'Login';
-            title = intl.formatMessage({id: 'mobile.routes.login', defaultMessage: 'Login'});
-        }
-
-        this.props.navigator.push({
-            screen,
-            title,
-            animated: true,
-            backButtonTitle: '',
-            navigatorStyle: {
-                navBarHidden: Config.AutoSelectServerUrl,
-                disabledBackGesture: Config.AutoSelectServerUrl,
-                navBarTextColor: theme.sidebarHeaderTextColor,
-                navBarBackgroundColor: theme.sidebarHeaderBg,
-                navBarButtonColor: theme.sidebarHeaderTextColor
-            }
-        });
-
-        this.props.actions.resetPing();
+        goToScreen(screen, title, passProps, options);
     };
 
     handleAndroidKeyboard = () => {
         this.blur();
     };
 
-    handleTextChanged = (url) => {
-        this.setState({url});
-    };
-
-    onClick = wrapWithPreventDoubleTap(async () => {
-        const preUrl = urlParse(this.state.url, true);
-        const url = stripTrailingSlashes(preUrl.protocol + '//' + preUrl.host);
+    handleConnect = preventDoubleTap(async () => {
+        const url = this.getUrl();
 
         Keyboard.dismiss();
 
@@ -199,30 +201,117 @@ class SelectServer extends PureComponent {
             this.setState({
                 error: {
                     intl: {
-                        id: 'mobile.server_url.invalid_format',
-                        defaultMessage: 'URL must start with http:// or https://'
-                    }
-                }
+                        id: t('mobile.server_url.invalid_format'),
+                        defaultMessage: 'URL must start with http:// or https://',
+                    },
+                },
             });
 
             return;
         }
 
-        this.pingServer(url);
+        if (LocalConfig.ExperimentalClientSideCertEnable && Platform.OS === 'ios') {
+            RNFetchBlob.cba.selectCertificate((certificate) => {
+                if (certificate) {
+                    mattermostBucket.setPreference('cert', certificate);
+                    window.fetch = new RNFetchBlob.polyfill.Fetch({
+                        auto: true,
+                        certificate,
+                    }).build();
+                    this.pingServer(url);
+                }
+            });
+        } else {
+            this.pingServer(url);
+        }
     });
 
-    pingServer = (url) => {
+    handleLoginOptions = (props = this.props) => {
+        const {formatMessage} = this.context.intl;
+        const {config, license} = props;
+        const samlEnabled = config.EnableSaml === 'true' && license.IsLicensed === 'true' && license.SAML === 'true';
+        const gitlabEnabled = config.EnableSignUpWithGitLab === 'true';
+        const o365Enabled = config.EnableSignUpWithOffice365 === 'true' && license.IsLicensed === 'true' && license.Office365OAuth === 'true';
+
+        let options = 0;
+        if (samlEnabled || gitlabEnabled || o365Enabled) {
+            options += 1;
+        }
+
+        let screen;
+        let title;
+        if (options) {
+            screen = 'LoginOptions';
+            title = formatMessage({id: 'mobile.routes.loginOptions', defaultMessage: 'Login Chooser'});
+        } else {
+            screen = 'Login';
+            title = formatMessage({id: 'mobile.routes.login', defaultMessage: 'Login'});
+        }
+
+        this.props.actions.resetPing();
+
+        if (Platform.OS === 'ios') {
+            if (config.ExperimentalClientSideCertEnable === 'true' && config.ExperimentalClientSideCertCheck === 'primary') {
+                // log in automatically and send directly to the channel screen
+                this.loginWithCertificate();
+                return;
+            }
+
+            setTimeout(() => {
+                this.goToNextScreen(screen, title);
+            }, 350);
+        } else {
+            this.goToNextScreen(screen, title);
+        }
+    };
+
+    handleShowClientUpgrade = (upgradeType) => {
+        const {formatMessage} = this.context.intl;
+        const screen = 'ClientUpgrade';
+        const title = formatMessage({id: 'mobile.client_upgrade', defaultMessage: 'Client Upgrade'});
+        const passProps = {
+            closeAction: this.handleLoginOptions,
+            upgradeType,
+        };
+        const options = {
+            statusBar: {
+                visible: false,
+            },
+        };
+
+        this.goToNextScreen(screen, title, passProps, options);
+    };
+
+    handleTextChanged = (url) => {
+        this.setState({url});
+    };
+
+    inputRef = (ref) => {
+        this.textInput = ref;
+    };
+
+    loginWithCertificate = async () => {
+        tracker.initialLoad = Date.now();
+
+        await this.props.actions.login('credential', 'password');
+        await this.props.actions.handleSuccessfulLogin();
+        this.scheduleSessionExpiredNotification();
+
+        resetToChannel();
+    };
+
+    pingServer = (url, retryWithHttp = true) => {
         const {
             getPing,
             handleServerUrlChanged,
             loadConfigAndLicense,
-            setServerVersion
+            setServerVersion,
         } = this.props.actions;
 
         this.setState({
             connected: false,
             connecting: true,
-            error: null
+            error: null,
         });
 
         Client4.setUrl(url);
@@ -234,7 +323,7 @@ class SelectServer extends PureComponent {
 
             this.setState({
                 connected: false,
-                connecting: false
+                connecting: false,
             });
 
             this.cancelPing = null;
@@ -242,6 +331,11 @@ class SelectServer extends PureComponent {
 
         getPing().then((result) => {
             if (cancel) {
+                return;
+            }
+
+            if (result.error && retryWithHttp) {
+                this.pingServer(url.replace('https:', 'http:'), false);
                 return;
             }
 
@@ -253,7 +347,7 @@ class SelectServer extends PureComponent {
             this.setState({
                 connected: !result.error,
                 connecting: false,
-                error: result.error
+                error: result.error,
             });
         }).catch(() => {
             if (cancel) {
@@ -261,28 +355,38 @@ class SelectServer extends PureComponent {
             }
 
             this.setState({
-                connecting: false
+                connecting: false,
             });
         });
     };
 
-    inputRef = (ref) => {
-        this.textInput = ref;
+    scheduleSessionExpiredNotification = () => {
+        const {intl} = this.context;
+        const {actions} = this.props;
+
+        actions.scheduleExpiredNotification(intl);
     };
 
-    blur = () => {
-        if (this.textInput) {
-            this.textInput.refs.wrappedInstance.blur();
-        }
+    selectCertificate = () => {
+        const url = this.getUrl();
+        RNFetchBlob.cba.selectCertificate((certificate) => {
+            if (certificate) {
+                mattermostBucket.setPreference('cert', certificate);
+                fetchConfig().then(() => {
+                    this.pingServer(url, true);
+                });
+            }
+        });
     };
 
     render() {
+        const {formatMessage} = this.context.intl;
         const {allowOtherServers} = this.props;
         const {
             connected,
             connecting,
             error,
-            url
+            url,
         } = this.state;
 
         let buttonIcon;
@@ -322,70 +426,80 @@ class SelectServer extends PureComponent {
         }
 
         return (
-            <KeyboardAvoidingView
-                behavior='padding'
+            <SafeAreaView
                 style={style.container}
-                keyboardVerticalOffset={0}
             >
-                <StatusBar barStyle={statusStyle}/>
-                <TouchableWithoutFeedback onPress={this.blur}>
-                    <View style={[GlobalStyles.container, GlobalStyles.signupContainer]}>
-                        <Image
-                            source={logo}
-                        />
-
-                        <View>
-                            <FormattedText
-                                style={[GlobalStyles.header, GlobalStyles.label]}
-                                id='mobile.components.select_server_view.enterServerUrl'
-                                defaultMessage='Enter Server URL'
+                <KeyboardAvoidingView
+                    behavior='padding'
+                    style={style.container}
+                    keyboardVerticalOffset={0}
+                    enabled={Platform.OS === 'ios'}
+                >
+                    <StatusBar barStyle={statusStyle}/>
+                    <TouchableWithoutFeedback
+                        onPress={this.blur}
+                        accessible={false}
+                    >
+                        <View style={[GlobalStyles.container, GlobalStyles.signupContainer]}>
+                            <Image
+                                source={require('assets/images/logo.png')}
                             />
+
+                            <View>
+                                <FormattedText
+                                    style={[GlobalStyles.header, GlobalStyles.label]}
+                                    id='mobile.components.select_server_view.enterServerUrl'
+                                    defaultMessage='Enter Server URL'
+                                />
+                            </View>
+                            <TextInput
+                                ref={this.inputRef}
+                                value={url}
+                                editable={!inputDisabled}
+                                onChangeText={this.handleTextChanged}
+                                onSubmitEditing={this.handleConnect}
+                                style={inputStyle}
+                                autoCapitalize='none'
+                                autoCorrect={false}
+                                keyboardType='url'
+                                placeholder={formatMessage({
+                                    id: 'mobile.components.select_server_view.siteUrlPlaceholder',
+                                    defaultMessage: 'https://mattermost.example.com',
+                                })}
+                                placeholderTextColor={changeOpacity('#000', 0.5)}
+                                returnKeyType='go'
+                                underlineColorAndroid='transparent'
+                                disableFullscreenUI={true}
+                            />
+                            <Button
+                                onPress={this.handleConnect}
+                                containerStyle={[GlobalStyles.signupButton, style.connectButton]}
+                            >
+                                {buttonIcon}
+                                <Text style={GlobalStyles.signupButtonText}>
+                                    {buttonText}
+                                </Text>
+                            </Button>
+                            <ErrorText error={error}/>
                         </View>
-                        <TextInputWithLocalizedPlaceholder
-                            ref={this.inputRef}
-                            value={url}
-                            editable={!inputDisabled}
-                            onChangeText={this.handleTextChanged}
-                            onSubmitEditing={this.onClick}
-                            style={inputStyle}
-                            autoCapitalize='none'
-                            autoCorrect={false}
-                            keyboardType='url'
-                            placeholder={{id: 'mobile.components.select_server_view.siteUrlPlaceholder', defaultMessage: 'https://mattermost.example.com'}}
-                            returnKeyType='go'
-                            underlineColorAndroid='transparent'
-                            disableFullscreenUI={true}
-                        />
-                        <Button
-                            onPress={this.onClick}
-                            containerStyle={[GlobalStyles.signupButton, style.connectButton]}
-                        >
-                            {buttonIcon}
-                            <Text style={GlobalStyles.signupButtonText}>
-                                {buttonText}
-                            </Text>
-                        </Button>
-                        <ErrorText error={error}/>
-                    </View>
-                </TouchableWithoutFeedback>
-            </KeyboardAvoidingView>
+                    </TouchableWithoutFeedback>
+                </KeyboardAvoidingView>
+            </SafeAreaView>
         );
     }
 }
 
 const style = StyleSheet.create({
     container: {
-        flex: 1
+        flex: 1,
     },
     disabledInput: {
-        backgroundColor: '#e3e3e3'
+        backgroundColor: '#e3e3e3',
     },
     connectButton: {
-        alignItems: 'center'
+        alignItems: 'center',
     },
     connectingIndicator: {
-        marginRight: 5
-    }
+        marginRight: 5,
+    },
 });
-
-export default injectIntl(SelectServer);

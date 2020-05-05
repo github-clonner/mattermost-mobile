@@ -1,15 +1,25 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {connect} from 'react-redux';
 
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {isTimezoneEnabled} from '@mm-redux/selectors/entities/timezone';
 
+import {getAllowedThemes} from 'app/selectors/theme';
+import {isThemeSwitchingEnabled} from 'app/utils/theme';
+import {isLandscape} from 'app/selectors/device';
 import DisplaySettings from './display_settings';
 
 function mapStateToProps(state) {
+    const enableTimezone = isTimezoneEnabled(state);
+    const enableTheme = isThemeSwitchingEnabled(state) && getAllowedThemes(state).length > 1;
+
     return {
-        theme: getTheme(state)
+        enableTheme,
+        enableTimezone,
+        theme: getTheme(state),
+        isLandscape: isLandscape(state),
     };
 }
 

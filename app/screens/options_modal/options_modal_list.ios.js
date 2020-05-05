@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
@@ -7,10 +7,10 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import IconFont from 'react-native-vector-icons/FontAwesome';
-
+import {paddingHorizontal as padding} from 'app/components/safe_area_view/iphone_x_spacing';
 import FormattedText from 'app/components/formatted_text';
 import {preventDoubleTap} from 'app/utils/tap';
 
@@ -18,17 +18,43 @@ export default class OptionsModalList extends PureComponent {
     static propTypes = {
         items: PropTypes.array.isRequired,
         onCancelPress: PropTypes.func,
+        onItemPress: PropTypes.func,
         title: PropTypes.oneOfType([
             PropTypes.string,
-            PropTypes.object
-        ])
+            PropTypes.object,
+        ]),
+        isLandscape: PropTypes.bool.isRequired,
     };
+
+    static defaultProps = {
+        items: [],
+    };
+
+    handleCancelPress = preventDoubleTap(() => {
+        if (this.props.onCancelPress) {
+            this.props.onCancelPress();
+        }
+    });
+
+    handleItemPress = preventDoubleTap((action) => {
+        this.props.onItemPress();
+        setTimeout(() => {
+            if (typeof action === 'function') {
+                action();
+            }
+        }, 100);
+    });
 
     renderOptions = () => {
         const {items} = this.props;
 
         const options = items.map((item, index) => {
             let textComponent;
+            let optionIconStyle = style.optionIcon;
+            if (typeof item.iconStyle !== 'undefined') {
+                optionIconStyle = item.iconStyle;
+            }
+
             if (item.text.hasOwnProperty('id')) {
                 textComponent = (
                     <FormattedText
@@ -41,20 +67,24 @@ export default class OptionsModalList extends PureComponent {
             }
 
             return (
-                <TouchableOpacity
+                <View
                     key={index}
-                    onPress={() => preventDoubleTap(item.action, this)}
-                    style={[style.option, (index < items.length - 1 && style.optionBorder)]}
+                    style={[(index < items.length - 1 && style.optionBorder)]}
                 >
-                    {textComponent}
-                    {item.icon &&
+                    <TouchableOpacity
+                        onPress={() => this.handleItemPress(item.action)}
+                        style={style.option}
+                    >
+                        {textComponent}
+                        {item.icon &&
                         <IconFont
                             name={item.icon}
                             size={18}
-                            style={style.optionIcon}
+                            style={optionIconStyle}
                         />
-                    }
-                </TouchableOpacity>
+                        }
+                    </TouchableOpacity>
+                </View>
             );
         });
 
@@ -84,21 +114,19 @@ export default class OptionsModalList extends PureComponent {
 
         return [
             title,
-            ...options
+            ...options,
         ];
     };
 
     render() {
-        const {onCancelPress} = this.props;
-
         return (
-            <View style={style.wrapper}>
+            <View style={[style.wrapper, padding(this.props.isLandscape)]}>
                 <View style={style.optionContainer}>
                     {this.renderOptions()}
                 </View>
                 <View style={style.optionContainer}>
                     <TouchableOpacity
-                        onPress={() => preventDoubleTap(onCancelPress, this)}
+                        onPress={this.handleCancelPress}
                         style={style.option}
                     >
                         <FormattedText
@@ -119,41 +147,41 @@ const style = StyleSheet.create({
         alignItems: 'center',
         flexDirection: 'row',
         justifyContent: 'space-between',
-        padding: 15
+        padding: 15,
     },
     optionBorder: {
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0, 0, 0, 0.1)'
+        borderBottomColor: 'rgba(0, 0, 0, 0.1)',
     },
     optionCancelText: {
         color: '#CC3239',
         flex: 1,
         fontSize: 20,
-        textAlign: 'center'
+        textAlign: 'center',
     },
     optionContainer: {
         alignSelf: 'stretch',
         backgroundColor: 'white',
         borderRadius: 12,
         marginBottom: 20,
-        marginHorizontal: 20
+        marginHorizontal: 20,
     },
     optionIcon: {
-        color: '#4E8ACC'
+        color: '#4E8ACC',
     },
     optionText: {
         color: '#4E8ACC',
         flex: 1,
-        fontSize: 20
+        fontSize: 20,
     },
     optionTitleText: {
         color: '#7f8180',
         flex: 1,
-        textAlign: 'center'
+        textAlign: 'center',
     },
     wrapper: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'flex-end'
-    }
+        justifyContent: 'flex-end',
+    },
 });

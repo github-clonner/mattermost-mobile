@@ -1,11 +1,11 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React from 'react';
 import {
     ScrollView,
     Text,
-    View
+    View,
 } from 'react-native';
 import {injectIntl} from 'react-intl';
 
@@ -14,34 +14,28 @@ import StatusBar from 'app/components/status_bar';
 import Section from 'app/screens/settings/section';
 import SectionItem from 'app/screens/settings/section_item';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
+import {t} from 'app/utils/i18n';
+import {goToScreen} from 'app/actions/navigation';
 
 import NotificationSettingsMentionsBase from './notification_settings_mention_base';
 
 class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
     goToNotificationSettingsMentionKeywords = () => {
-        const {intl, navigator, theme} = this.props;
+        const {intl} = this.props;
         this.goingBack = false;
 
-        navigator.push({
-            backButtonTitle: '',
-            screen: 'NotificationSettingsMentionsKeywords',
-            title: intl.formatMessage({id: 'mobile.notification_settings_mentions.keywords', defaultMessage: 'Keywords'}),
-            animated: true,
-            navigatorStyle: {
-                navBarTextColor: theme.sidebarHeaderTextColor,
-                navBarBackgroundColor: theme.sidebarHeaderBg,
-                navBarButtonColor: theme.sidebarHeaderTextColor,
-                screenBackgroundColor: theme.centerChannelBg
-            },
-            passProps: {
-                keywords: this.state.mention_keys,
-                onBack: this.updateMentionKeys
-            }
-        });
+        const screen = 'NotificationSettingsMentionsKeywords';
+        const title = intl.formatMessage({id: 'mobile.notification_settings_mentions.keywords', defaultMessage: 'Keywords'});
+        const passProps = {
+            keywords: this.state.mention_keys,
+            onBack: this.updateMentionKeys,
+        };
+
+        goToScreen(screen, title, passProps);
     };
 
     renderMentionSection(style) {
-        const {currentUser, theme} = this.props;
+        const {currentUser, theme, isLandscape} = this.props;
 
         let mentionKeysComponent;
         if (this.state.mention_keys) {
@@ -57,11 +51,12 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
 
         return (
             <Section
-                headerId='mobile.notification_settings_mentions.wordsTrigger'
+                headerId={t('mobile.notification_settings_mentions.wordsTrigger')}
                 headerDefaultMessage='WORDS THAT TRIGGER MENTIONS'
                 theme={theme}
+                isLandscape={isLandscape}
             >
-                {currentUser.first_name.length > 0 &&
+                {currentUser.first_name?.length > 0 &&
                 <View>
                     <SectionItem
                         label={(
@@ -79,6 +74,7 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
                         actionType='toggle'
                         selected={this.state.first_name === 'true'}
                         theme={theme}
+                        isLandscape={isLandscape}
                     />
                     <View style={style.separator}/>
                 </View>
@@ -99,6 +95,7 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
                     action={this.toggleUsernameMention}
                     actionType='toggle'
                     theme={theme}
+                    isLandscape={isLandscape}
                 />
                 <View style={style.separator}/>
                 <SectionItem
@@ -117,6 +114,7 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
                     actionType='toggle'
                     selected={this.state.channel === 'true'}
                     theme={theme}
+                    isLandscape={isLandscape}
                 />
                 <View style={style.separator}/>
                 <SectionItem
@@ -130,19 +128,21 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
                     action={this.goToNotificationSettingsMentionKeywords}
                     actionType='arrow'
                     theme={theme}
+                    isLandscape={isLandscape}
                 />
             </Section>
         );
     }
 
     renderReplySection(style) {
-        const {theme} = this.props;
+        const {theme, isLandscape} = this.props;
 
         return (
             <Section
-                headerId='mobile.account_notifications.reply.header'
+                headerId={t('mobile.account_notifications.reply.header')}
                 headerDefaultMessage='SEND REPLY NOTIFICATIONS FOR'
                 theme={theme}
+                isLandscape={isLandscape}
             >
                 <SectionItem
                     label={(
@@ -156,6 +156,7 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
                     actionValue='any'
                     selected={this.state.comments === 'any'}
                     theme={theme}
+                    isLandscape={isLandscape}
                 />
                 <View style={style.separator}/>
                 <SectionItem
@@ -170,6 +171,7 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
                     actionValue='root'
                     selected={this.state.comments === 'root'}
                     theme={theme}
+                    isLandscape={isLandscape}
                 />
                 <View style={style.separator}/>
                 <SectionItem
@@ -184,6 +186,7 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
                     actionValue='never'
                     selected={this.state.comments === 'never'}
                     theme={theme}
+                    isLandscape={isLandscape}
                 />
             </Section>
         );
@@ -213,26 +216,26 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
             flex: 1,
-            backgroundColor: theme.centerChannelBg
+            backgroundColor: theme.centerChannelBg,
         },
         input: {
             color: theme.centerChannelColor,
             fontSize: 12,
-            height: 40
+            height: 40,
         },
         separator: {
             backgroundColor: changeOpacity(theme.centerChannelColor, 0.1),
             flex: 1,
             height: 1,
-            marginLeft: 15
+            marginLeft: 15,
         },
         scrollView: {
             flex: 1,
-            backgroundColor: changeOpacity(theme.centerChannelColor, 0.06)
+            backgroundColor: changeOpacity(theme.centerChannelColor, 0.06),
         },
         scrollViewContent: {
-            paddingVertical: 35
-        }
+            paddingVertical: 35,
+        },
     };
 });
 

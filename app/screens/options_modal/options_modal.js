@@ -1,19 +1,21 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
     Animated,
+    Platform,
     StyleSheet,
     TouchableWithoutFeedback,
-    View
+    View,
 } from 'react-native';
 
-import EventEmitter from 'mattermost-redux/utils/event_emitter';
+import EventEmitter from '@mm-redux/utils/event_emitter';
 
 import {NavigationTypes} from 'app/constants';
 import {emptyFunction} from 'app/utils/general';
+import {dismissModal} from 'app/actions/navigation';
 
 import OptionsModalList from './options_modal_list';
 
@@ -25,23 +27,23 @@ export default class OptionsModal extends PureComponent {
         items: PropTypes.array.isRequired,
         deviceHeight: PropTypes.number.isRequired,
         deviceWidth: PropTypes.number.isRequired,
-        navigator: PropTypes.object,
         onCancelPress: PropTypes.func,
         title: PropTypes.oneOfType([
             PropTypes.string,
-            PropTypes.object
-        ])
+            PropTypes.object,
+        ]),
+        isLandscape: PropTypes.bool.isRequired,
     };
 
     static defaultProps = {
-        onCancelPress: emptyFunction
+        onCancelPress: emptyFunction,
     };
 
     constructor(props) {
         super(props);
 
         this.state = {
-            top: new Animated.Value(props.deviceHeight)
+            top: new Animated.Value(props.deviceHeight),
         };
     }
 
@@ -49,7 +51,8 @@ export default class OptionsModal extends PureComponent {
         EventEmitter.on(NavigationTypes.NAVIGATION_CLOSE_MODAL, this.close);
         Animated.timing(this.state.top, {
             toValue: 0,
-            duration: DURATION
+            duration: DURATION,
+            useNativeDriver: false,
         }).start();
     }
 
@@ -65,28 +68,38 @@ export default class OptionsModal extends PureComponent {
     close = () => {
         Animated.timing(this.state.top, {
             toValue: this.props.deviceHeight,
-            duration: DURATION
+            duration: DURATION,
+            useNativeDriver: false,
         }).start(() => {
-            this.props.navigator.dismissModal({
-                animationType: 'none'
-            });
+            dismissModal();
         });
+    };
+
+    onItemPress = () => {
+        if (Platform.OS === 'android') {
+            this.close();
+        } else {
+            dismissModal();
+        }
     };
 
     render() {
         const {
             items,
-            title
+            title,
+            isLandscape,
         } = this.props;
 
         return (
-            <TouchableWithoutFeedback onPress={this.close}>
+            <TouchableWithoutFeedback onPress={this.handleCancel}>
                 <View style={style.wrapper}>
                     <AnimatedView style={{height: this.props.deviceHeight, left: 0, top: this.state.top, width: this.props.deviceWidth}}>
                         <OptionsModalList
                             items={items}
                             onCancelPress={this.handleCancel}
+                            onItemPress={this.onItemPress}
                             title={title}
+                            isLandscape={isLandscape}
                         />
                     </AnimatedView>
                 </View>
@@ -97,7 +110,7 @@ export default class OptionsModal extends PureComponent {
 
 const style = StyleSheet.create({
     wrapper: {
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        flex: 1
-    }
+        backgroundColor: Platform.select({ios: 'rgba(0, 0, 0, 0.5)'}),
+        flex: 1,
+    },
 });

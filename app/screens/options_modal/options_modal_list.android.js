@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
@@ -7,7 +7,7 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import IconFont from 'react-native-vector-icons/FontAwesome';
 
@@ -17,14 +17,39 @@ import {preventDoubleTap} from 'app/utils/tap';
 export default class OptionsModalList extends PureComponent {
     static propTypes = {
         items: PropTypes.array.isRequired,
-        onCancelPress: PropTypes.func
+        onCancelPress: PropTypes.func,
+        onItemPress: PropTypes.func,
     };
 
+    static defaultProps = {
+        items: [],
+    };
+
+    handleCancelPress = preventDoubleTap(() => {
+        if (this.props.onCancelPress) {
+            this.props.onCancelPress();
+        }
+    });
+
+    handleItemPress = preventDoubleTap((action) => {
+        this.props.onItemPress();
+        setTimeout(() => {
+            if (typeof action === 'function') {
+                action();
+            }
+        }, 250);
+    });
+
     renderOptions = () => {
-        const {items, onCancelPress} = this.props;
+        const {items} = this.props;
 
         const options = items.map((item, index) => {
             let textComponent;
+            let optionIconStyle = style.optionIcon;
+            if (typeof item.iconStyle !== 'undefined') {
+                optionIconStyle = item.iconStyle;
+            }
+
             if (item.text.hasOwnProperty('id')) {
                 textComponent = (
                     <FormattedText
@@ -37,27 +62,31 @@ export default class OptionsModalList extends PureComponent {
             }
 
             return (
-                <TouchableOpacity
+                <View
                     key={index}
-                    onPress={() => preventDoubleTap(item.action, this)}
-                    style={[style.option, style.optionBorder]}
+                    style={style.optionBorder}
                 >
-                    {textComponent}
-                    {item.icon &&
+                    <TouchableOpacity
+                        onPress={() => this.handleItemPress(item.action)}
+                        style={style.option}
+                    >
+                        {textComponent}
+                        {item.icon &&
                         <IconFont
                             name={item.icon}
                             size={18}
-                            style={style.optionIcon}
+                            style={optionIconStyle}
                         />
-                    }
-                </TouchableOpacity>
+                        }
+                    </TouchableOpacity>
+                </View>
             );
         });
 
         const cancel = (
             <TouchableOpacity
                 key={items.length}
-                onPress={() => preventDoubleTap(onCancelPress, this)}
+                onPress={this.handleCancelPress}
                 style={style.option}
             >
                 <FormattedText
@@ -70,7 +99,7 @@ export default class OptionsModalList extends PureComponent {
 
         return [
             ...options,
-            cancel
+            cancel,
         ];
     };
 
@@ -91,29 +120,29 @@ const style = StyleSheet.create({
         alignItems: 'center',
         flexDirection: 'row',
         justifyContent: 'space-between',
-        padding: 15
+        padding: 15,
     },
     optionBorder: {
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0, 0, 0, 0.1)'
+        borderBottomColor: 'rgba(0, 0, 0, 0.1)',
     },
     optionContainer: {
         alignSelf: 'stretch',
         backgroundColor: 'white',
         borderRadius: 2,
-        marginHorizontal: 30
+        marginHorizontal: 30,
     },
     optionIcon: {
-        color: '#7f8180'
+        color: '#7f8180',
     },
     optionText: {
         color: '#000',
         flex: 1,
-        fontSize: 16
+        fontSize: 16,
     },
     wrapper: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'center'
-    }
+        justifyContent: 'center',
+    },
 });

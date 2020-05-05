@@ -1,12 +1,14 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {combineReducers} from 'redux';
 
 import build from './build';
 import version from './version';
+import previousVersion from './previousVersion';
 
 export default combineReducers({
     build,
-    version
+    version,
+    previousVersion,
 });

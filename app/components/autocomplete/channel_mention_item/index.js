@@ -1,21 +1,42 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {connect} from 'react-redux';
 
-import {getChannel} from 'mattermost-redux/selectors/entities/channels';
+import {General} from '@mm-redux/constants';
+import {getChannel} from '@mm-redux/selectors/entities/channels';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {getUser} from '@mm-redux/selectors/entities/users';
 
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
+import {getChannelNameForSearchAutocomplete} from 'app/selectors/channel';
+import {isLandscape} from 'app/selectors/device';
+import {isGuest as isGuestUser} from 'app/utils/users';
 
 import ChannelMentionItem from './channel_mention_item';
 
 function mapStateToProps(state, ownProps) {
     const channel = getChannel(state, ownProps.channelId);
+    let displayName = getChannelNameForSearchAutocomplete(state, ownProps.channelId);
+
+    let isBot = false;
+    let isGuest = false;
+    if (channel?.type === General.DM_CHANNEL) {
+        const teammate = getUser(state, channel.teammate_id);
+        if (teammate) {
+            displayName = teammate.username;
+            isBot = teammate.is_bot || false;
+            isGuest = isGuestUser(teammate) || false;
+        }
+    }
 
     return {
-        displayName: channel.display_name,
-        name: channel.name,
-        theme: getTheme(state)
+        displayName,
+        name: channel?.name,
+        type: channel?.type,
+        isBot,
+        isGuest,
+        theme: getTheme(state),
+        isLandscape: isLandscape(state),
     };
 }
 

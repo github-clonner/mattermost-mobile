@@ -10,13 +10,13 @@
     "AboutEnterpriseURL": "http://about.mattermost.com/",
     "PlatformNoticeURL": "https://about.mattermost.com/platform-notice-txt/",
     "MobileNoticeURL": "https://about.mattermost.com/mobile-notice-txt/",
-    "SegmentApiKey": "3MT7rAoC0OP7yy3ThzqFSAtKzmzqtUPX",
-    "ExperimentalUsernamePressIsMention": false,
+    "SegmentApiKey": "",
 
     "HideEmailLoginExperimental": false,
     "HideGitLabLoginExperimental": false,
     "HideLDAPLoginExperimental": false,
     "HideSAMLLoginExperimental": false,
+    "HideO365LoginExperimental": false,
 
     "SentryEnabled": false,
     "SentryDsnIos": "",
@@ -28,9 +28,9 @@
             "console": true
         }
     },
-    
+
     "ExperimentalNormalizeMarkdownLinks": false,
-    
+
     "AutoSelectServerUrl": false,
 
     "EnableMobileClientUpgrade": false,
@@ -39,5 +39,11 @@
     "MobileClientUpgradeAndroidApkLink": "https://about.mattermost.com/mattermost-android-app/",
     "MobileClientUpgradeIosIpaLink": "https://about.mattermost.com/mattermost-ios-app/",
 
-    "AppGroupId": "group.com.mattermost.rnbeta"
+    "ShowSentryDebugOptions": false,
+
+    "CustomRequestHeaders": {},
+
+    "TelemetryEnabled": false,
+    "TelemetryUrl": "",
+    "TelemetryApiKey": ""
 }

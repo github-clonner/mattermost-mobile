@@ -1,20 +1,41 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
-import keyMirror from 'mattermost-redux/utils/key_mirror';
+import keyMirror from '@mm-redux/utils/key_mirror';
+import DeviceInfo from 'react-native-device-info';
+
+// The iPhone 11 and iPhone 11 Pro Max have a navbar height of 44 and iPhone 11 Pro has 32
+const IPHONE_11_LANDSCAPE_HEIGHT = ['iPhone 11', 'iPhone 11 Pro Max'];
 
 export const UpgradeTypes = {
     CAN_UPGRADE: 'can_upgrade',
     MUST_UPGRADE: 'must_upgrade',
-    NO_UPGRADE: 'no_upgrade'
+    NO_UPGRADE: 'no_upgrade',
+    IS_BETA: 'is_beta',
 };
+
+export const SidebarSectionTypes = {
+    UNREADS: 'unreads',
+    FAVORITE: 'favorite',
+    PUBLIC: 'public',
+    PRIVATE: 'private',
+    DIRECT: 'direct',
+    RECENT_ACTIVITY: 'recent',
+    ALPHA: 'alpha',
+};
+
+export const NotificationLevels = {
+    DEFAULT: 'default',
+    ALL: 'all',
+    MENTION: 'mention',
+    NONE: 'none',
+};
+
+export const NOTIFY_ALL_MEMBERS = 5;
 
 const ViewTypes = keyMirror({
     DATA_CLEANUP: null,
     SERVER_URL_CHANGED: null,
-
-    LOGIN_ID_CHANGED: null,
-    PASSWORD_CHANGED: null,
 
     POST_DRAFT_CHANGED: null,
     COMMENT_DRAFT_CHANGED: null,
@@ -24,7 +45,6 @@ const ViewTypes = keyMirror({
     COMMENT_DRAFT_SELECTION_CHANGED: null,
 
     NOTIFICATION_IN_APP: null,
-    NOTIFICATION_TAPPED: null,
 
     SET_POST_DRAFT: null,
     SET_COMMENT_DRAFT: null,
@@ -38,20 +58,18 @@ const ViewTypes = keyMirror({
     REMOVE_FILE_FROM_POST_DRAFT: null,
     REMOVE_LAST_FILE_FROM_POST_DRAFT: null,
 
-    ADD_FILE_TO_FETCH_CACHE: null,
-
     SET_CHANNEL_LOADER: null,
     SET_CHANNEL_REFRESHING: null,
     SET_CHANNEL_RETRY_FAILED: null,
     SET_CHANNEL_DISPLAY_NAME: null,
 
-    SET_LAST_CHANNEL_FOR_TEAM: null,
+    REMOVE_LAST_CHANNEL_FOR_TEAM: null,
 
     GITLAB: null,
+    OFFICE365: null,
     SAML: null,
 
     SET_INITIAL_POST_VISIBILITY: null,
-    INCREASE_POST_VISIBILITY: null,
     RECEIVED_FOCUSED_POST: null,
     LOADING_POSTS: null,
     SET_LOAD_MORE_POSTS_VISIBLE: null,
@@ -64,7 +82,17 @@ const ViewTypes = keyMirror({
     EXTENSION_SELECTED_TEAM_ID: null,
     ANNOUNCEMENT_BANNER: null,
 
-    INCREMENT_EMOJI_PICKER_PAGE: null
+    INCREMENT_EMOJI_PICKER_PAGE: null,
+
+    SET_DEEP_LINK_URL: null,
+
+    SET_PROFILE_IMAGE_URI: null,
+
+    SELECTED_ACTION_MENU: null,
+    SUBMIT_ATTACHMENT_MENU_ACTION: null,
+
+    PORTRAIT: null,
+    LANDSCAPE: null,
 });
 
 export default {
@@ -74,11 +102,18 @@ export default {
     EMBED_PREVIEW: 'embed_preview',
     LINK_PREVIEW_DISPLAY: 'link_previews',
     MIN_CHANNELNAME_LENGTH: 2,
-    MAX_CHANNELNAME_LENGTH: 22,
+    MAX_CHANNELNAME_LENGTH: 64,
     ANDROID_TOP_LANDSCAPE: 46,
     ANDROID_TOP_PORTRAIT: 56,
-    IOS_TOP_LANDSCAPE: 32,
+    IOS_TOP_LANDSCAPE: IPHONE_11_LANDSCAPE_HEIGHT.includes(DeviceInfo.getModel()) ? 44 : 32,
     IOS_TOP_PORTRAIT: 64,
-    IOSX_TOP_PORTRAIT: 88,
-    STATUS_BAR_HEIGHT: 20
+    IOS_INSETS_TOP_PORTRAIT: 88,
+    STATUS_BAR_HEIGHT: 20,
+    PROFILE_PICTURE_SIZE: 32,
+    PROFILE_PICTURE_EMOJI_SIZE: 28,
+    DATA_SOURCE_USERS: 'users',
+    DATA_SOURCE_CHANNELS: 'channels',
+    NotificationLevels,
+    SidebarSectionTypes,
+    IOS_HORIZONTAL_LANDSCAPE: 44,
 };

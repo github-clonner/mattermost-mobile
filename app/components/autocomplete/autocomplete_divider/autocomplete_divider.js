@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
@@ -9,7 +9,7 @@ import {makeStyleSheetFromTheme, changeOpacity} from 'app/utils/theme';
 
 export default class AutocompleteDivider extends PureComponent {
     static propTypes = {
-        theme: PropTypes.object.isRequired
+        theme: PropTypes.object.isRequired,
     };
 
     render() {
@@ -26,7 +26,7 @@ const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
     return {
         divider: {
             height: 1,
-            backgroundColor: changeOpacity(theme.centerChannelColor, 0.2)
-        }
+            backgroundColor: changeOpacity(theme.centerChannelColor, 0.2),
+        },
     };
 });

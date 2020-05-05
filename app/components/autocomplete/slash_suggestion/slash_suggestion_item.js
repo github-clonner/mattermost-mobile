@@ -1,23 +1,22 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
-import {
-    Text,
-    TouchableOpacity
-} from 'react-native';
+import {Text} from 'react-native';
 
+import {paddingHorizontal as padding} from 'app/components/safe_area_view/iphone_x_spacing';
+import TouchableWithFeedback from 'app/components/touchable_with_feedback';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
 
 export default class SlashSuggestionItem extends PureComponent {
     static propTypes = {
-        displayName: PropTypes.string,
         description: PropTypes.string,
         hint: PropTypes.string,
         onPress: PropTypes.func.isRequired,
         theme: PropTypes.object.isRequired,
-        trigger: PropTypes.string
+        trigger: PropTypes.string,
+        isLandscape: PropTypes.bool.isRequired,
     };
 
     completeSuggestion = () => {
@@ -27,23 +26,24 @@ export default class SlashSuggestionItem extends PureComponent {
 
     render() {
         const {
-            displayName,
             description,
             hint,
             theme,
-            trigger
+            trigger,
+            isLandscape,
         } = this.props;
 
         const style = getStyleFromTheme(theme);
 
         return (
-            <TouchableOpacity
+            <TouchableWithFeedback
                 onPress={this.completeSuggestion}
-                style={style.row}
+                style={[style.row, padding(isLandscape)]}
+                type={'opacity'}
             >
-                <Text style={style.suggestionName}>{`/${displayName || trigger} ${hint}`}</Text>
+                <Text style={style.suggestionName}>{`/${trigger} ${hint}`}</Text>
                 <Text style={style.suggestionDescription}>{description}</Text>
-            </TouchableOpacity>
+            </TouchableWithFeedback>
         );
     }
 }
@@ -51,33 +51,31 @@ export default class SlashSuggestionItem extends PureComponent {
 const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
     return {
         row: {
-            height: 55,
+            paddingVertical: 8,
             justifyContent: 'center',
             paddingHorizontal: 8,
             backgroundColor: theme.centerChannelBg,
-            borderTopWidth: 1,
-            borderTopColor: changeOpacity(theme.centerChannelColor, 0.2),
             borderLeftWidth: 1,
             borderLeftColor: changeOpacity(theme.centerChannelColor, 0.2),
             borderRightWidth: 1,
-            borderRightColor: changeOpacity(theme.centerChannelColor, 0.2)
+            borderRightColor: changeOpacity(theme.centerChannelColor, 0.2),
         },
         rowDisplayName: {
             fontSize: 13,
-            color: theme.centerChannelColor
+            color: theme.centerChannelColor,
         },
         rowName: {
             color: theme.centerChannelColor,
-            opacity: 0.6
+            opacity: 0.6,
         },
         suggestionDescription: {
             fontSize: 11,
-            color: changeOpacity(theme.centerChannelColor, 0.6)
+            color: changeOpacity(theme.centerChannelColor, 0.6),
         },
         suggestionName: {
             fontSize: 13,
             color: theme.centerChannelColor,
-            marginBottom: 5
-        }
+            marginBottom: 5,
+        },
     };
 });

@@ -1,30 +1,30 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
-import {getSession, handleSuccessfulLogin} from 'app/actions/views/login';
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
-
-import {setStoreFromLocalData} from 'mattermost-redux/actions/general';
+import {scheduleExpiredNotification} from 'app/actions/views/login';
+import {ssoLogin} from 'app/actions/views/user';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {isLandscape} from 'app/selectors/device';
 
 import SSO from './sso';
 
 function mapStateToProps(state) {
     return {
         ...state.views.selectServer,
-        theme: getTheme(state)
+        theme: getTheme(state),
+        isLandscape: isLandscape(state),
     };
 }
 
 function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
-            getSession,
-            handleSuccessfulLogin,
-            setStoreFromLocalData
-        }, dispatch)
+            scheduleExpiredNotification,
+            ssoLogin,
+        }, dispatch),
     };
 }
 

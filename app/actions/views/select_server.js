@@ -1,21 +1,23 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {batchActions} from 'redux-batched-actions';
-import {GeneralTypes} from 'mattermost-redux/action_types';
+import {GeneralTypes} from '@mm-redux/action_types';
 
 import {ViewTypes} from 'app/constants';
 
 export function handleServerUrlChanged(serverUrl) {
-    return async (dispatch, getState) => {
-        dispatch(batchActions([
-            {type: GeneralTypes.CLIENT_CONFIG_RESET},
-            {type: GeneralTypes.CLIENT_LICENSE_RESET},
-            {type: ViewTypes.SERVER_URL_CHANGED, serverUrl}
-        ]), getState);
-    };
+    return batchActions([
+        {type: GeneralTypes.CLIENT_CONFIG_RESET},
+        {type: GeneralTypes.CLIENT_LICENSE_RESET},
+        {type: ViewTypes.SERVER_URL_CHANGED, serverUrl},
+    ], 'BATCH_SERVER_URL_CHANGED');
+}
+
+export function setServerUrl(serverUrl) {
+    return {type: ViewTypes.SERVER_URL_CHANGED, serverUrl};
 }
 
 export default {
-    handleServerUrlChanged
+    handleServerUrlChanged,
 };

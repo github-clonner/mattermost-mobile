@@ -1,21 +1,20 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
 import {loadFromPushNotification} from 'app/actions/views/root';
-import {getDimensions} from 'app/selectors/device';
 
-import {getChannel} from 'mattermost-redux/selectors/entities/channels';
-import {getTeammateNameDisplaySetting, getTheme} from 'mattermost-redux/selectors/entities/preferences';
-import {getUser} from 'mattermost-redux/selectors/entities/users';
+import {getChannel} from '@mm-redux/selectors/entities/channels';
+import {getTeammateNameDisplaySetting} from '@mm-redux/selectors/entities/preferences';
+import {getUser} from '@mm-redux/selectors/entities/users';
+import {getConfig} from '@mm-redux/selectors/entities/general';
 
 import Notification from './notification';
 
 function mapStateToProps(state, ownProps) {
     const {data} = ownProps.notification;
-    const {deviceWidth} = getDimensions(state);
 
     let user;
     if (data.sender_id) {
@@ -26,22 +25,20 @@ function mapStateToProps(state, ownProps) {
     if (data.channel_id) {
         channel = getChannel(state, data.channel_id);
     }
-
+    const config = getConfig(state);
     return {
-        config: state.entities.general.config,
+        config,
         channel,
-        deviceWidth,
         user,
         teammateNameDisplay: getTeammateNameDisplaySetting(state),
-        theme: getTheme(state)
     };
 }
 
 function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
-            loadFromPushNotification
-        }, dispatch)
+            loadFromPushNotification,
+        }, dispatch),
     };
 }
 

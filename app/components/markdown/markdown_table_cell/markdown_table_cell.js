@@ -1,5 +1,5 @@
-// Copyright (c) 2018-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import PropTypes from 'prop-types';
 import React from 'react';
@@ -7,24 +7,35 @@ import {Text, View} from 'react-native';
 
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
 
+export const CELL_MIN_WIDTH = 96;
+export const CELL_MAX_WIDTH = 192;
+
 export default class MarkdownTableCell extends React.PureComponent {
     static propTypes = {
+        align: PropTypes.oneOf(['', 'left', 'center', 'right']),
         children: PropTypes.node,
-        isHeading: PropTypes.bool.isRequired,
-        theme: PropTypes.object.isRequired
+        isLastCell: PropTypes.bool,
+        theme: PropTypes.object.isRequired,
     };
 
     render() {
         const style = getStyleSheet(this.props.theme);
 
         const cellStyle = [style.cell];
-        if (this.props.isHeading) {
-            cellStyle.push(style.heading);
+        if (!this.props.isLastCell) {
+            cellStyle.push(style.cellRightBorder);
+        }
+
+        let textStyle = null;
+        if (this.props.align === 'center') {
+            textStyle = style.alignCenter;
+        } else if (this.props.align === 'right') {
+            textStyle = style.alignRight;
         }
 
         return (
             <View style={cellStyle}>
-                <Text>
+                <Text style={textStyle}>
                     {this.props.children}
                 </Text>
             </View>
@@ -35,12 +46,19 @@ export default class MarkdownTableCell extends React.PureComponent {
 const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
         cell: {
-            borderColor: changeOpacity(theme.centerChannelColor, 0.2),
-            borderRightWidth: 1,
             flex: 1,
+            borderColor: changeOpacity(theme.centerChannelColor, 0.2),
             justifyContent: 'flex-start',
-            paddingHorizontal: 13,
-            paddingVertical: 6
-        }
+            padding: 8,
+        },
+        cellRightBorder: {
+            borderRightWidth: 1,
+        },
+        alignCenter: {
+            textAlign: 'center',
+        },
+        alignRight: {
+            textAlign: 'right',
+        },
     };
 });

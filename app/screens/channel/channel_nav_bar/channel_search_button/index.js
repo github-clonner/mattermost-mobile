@@ -1,12 +1,10 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
-import {clearSearch} from 'mattermost-redux/actions/search';
-
-import {handlePostDraftChanged} from 'app/actions/views/channel';
+import {clearSearch} from '@mm-redux/actions/search';
 
 import ChannelSearchButton from './channel_search_button';
 
@@ -14,8 +12,7 @@ function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
             clearSearch,
-            handlePostDraftChanged
-        }, dispatch)
+        }, dispatch),
     };
 }
 

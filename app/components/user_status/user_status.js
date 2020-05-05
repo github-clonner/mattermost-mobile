@@ -1,35 +1,39 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 
-import {General} from 'mattermost-redux/constants';
+import {General} from '@mm-redux/constants';
 
-import {AwayIcon, DndIcon, OfflineIcon, OnlineIcon} from 'app/components/status_icons';
+import Icon from 'app/components/vector_icon';
+
+import {changeOpacity} from 'app/utils/theme';
 
 const statusToIcon = {
-    away: AwayIcon,
-    dnd: DndIcon,
-    offline: OfflineIcon,
-    online: OnlineIcon
+    away: General.AWAY,
+    dnd: General.DND,
+    offline: General.OFFLINE,
+    ooo: General.OFFLINE,
+    online: General.ONLINE,
 };
 
 export default class UserStatus extends PureComponent {
     static propTypes = {
+        isAvatar: PropTypes.bool,
         size: PropTypes.number,
         status: PropTypes.string,
-        theme: PropTypes.object.isRequired
+        theme: PropTypes.object.isRequired,
     };
 
     static defaultProps = {
-        size: 14,
-        status: General.OFFLINE
+        size: 6,
+        status: General.OFFLINE,
     };
 
     render() {
         const {size, status, theme} = this.props;
-        const Icon = statusToIcon[status];
+        const iconName = statusToIcon[status];
 
         let iconColor;
         switch (status) {
@@ -43,15 +47,15 @@ export default class UserStatus extends PureComponent {
             iconColor = theme.onlineIndicator;
             break;
         default:
-            iconColor = theme.centerChannelColor;
+            iconColor = changeOpacity(theme.centerChannelColor, 0.3);
             break;
         }
 
         return (
             <Icon
-                height={size}
-                width={size}
-                color={iconColor}
+                name={iconName}
+                style={{fontSize: size, color: iconColor}}
+                type='mattermost'
             />
         );
     }

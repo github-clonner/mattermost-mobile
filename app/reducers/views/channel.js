@@ -1,19 +1,21 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {combineReducers} from 'redux';
+
+import {ViewTypes} from '@constants';
 import {
     ChannelTypes,
     FileTypes,
-    PostTypes
-} from 'mattermost-redux/action_types';
-
-import {ViewTypes} from 'app/constants';
+    PostTypes,
+} from '@mm-redux/action_types';
 
 function displayName(state = '', action) {
     switch (action.type) {
     case ViewTypes.SET_CHANNEL_DISPLAY_NAME:
-        return action.displayName;
+        return action.displayName || '';
+    case ChannelTypes.SELECT_CHANNEL:
+        return '';
     default:
         return state;
     }
@@ -22,16 +24,7 @@ function displayName(state = '', action) {
 function handlePostDraftChanged(state, action) {
     return {
         ...state,
-        [action.channelId]: Object.assign({}, state[action.channelId], {draft: action.draft})
-    };
-}
-
-function handlePostDraftSelectionChanged(state, action) {
-    return {
-        ...state,
-        [action.channelId]: Object.assign({}, state[action.channelId], {
-            cursorPosition: action.cursorPosition
-        })
+        [action.channelId]: Object.assign({}, state[action.channelId], {draft: action.draft}),
     };
 }
 
@@ -41,8 +34,8 @@ function handleSetPostDraft(state, action) {
         [action.channelId]: {
             draft: action.draft,
             cursorPosition: 0,
-            files: action.files
-        }
+            files: action.files,
+        },
     };
 }
 
@@ -54,8 +47,8 @@ function handleSelectChannel(state, action) {
             [action.data]: {
                 draft: '',
                 cursorPosition: 0,
-                files: []
-            }
+                files: [],
+            },
         };
     }
 
@@ -70,12 +63,12 @@ function handleSetTempUploadFileForPostDraft(state, action) {
     const tempFiles = action.clientIds.map((temp) => ({...temp, loading: true}));
     const files = [
         ...state[action.channelId].files,
-        ...tempFiles
+        ...tempFiles,
     ];
 
     return {
         ...state,
-        [action.channelId]: Object.assign({}, state[action.channelId], {files})
+        [action.channelId]: Object.assign({}, state[action.channelId], {files}),
     };
 }
 
@@ -89,7 +82,7 @@ function handleRetryUploadFileForPost(state, action) {
             return {
                 ...f,
                 loading: true,
-                failed: false
+                failed: false,
             };
         }
 
@@ -98,7 +91,7 @@ function handleRetryUploadFileForPost(state, action) {
 
     return {
         ...state,
-        [action.channelId]: Object.assign({}, state[action.channelId], {files})
+        [action.channelId]: Object.assign({}, state[action.channelId], {files}),
     };
 }
 
@@ -113,7 +106,8 @@ function handleReceivedUploadFiles(state, action) {
         if (file) {
             return {
                 ...file,
-                localPath: tempFile.localPath
+                localPath: tempFile.localPath,
+                loading: false,
             };
         }
 
@@ -122,7 +116,7 @@ function handleReceivedUploadFiles(state, action) {
 
     return {
         ...state,
-        [action.channelId]: Object.assign({}, state[action.channelId], {files})
+        [action.channelId]: Object.assign({}, state[action.channelId], {files}),
     };
 }
 
@@ -137,7 +131,7 @@ function handleUploadFilesFailure(state, action) {
             return {
                 ...tempFile,
                 loading: false,
-                failed: true
+                failed: true,
             };
         }
 
@@ -146,7 +140,7 @@ function handleUploadFilesFailure(state, action) {
 
     return {
         ...state,
-        [action.channelId]: Object.assign({}, state[action.channelId], {files})
+        [action.channelId]: Object.assign({}, state[action.channelId], {files}),
     };
 }
 
@@ -157,7 +151,7 @@ function handleClearFilesForPostDraft(state, action) {
 
     return {
         ...state,
-        [action.channelId]: Object.assign({}, state[action.channelId], {files: []})
+        [action.channelId]: Object.assign({}, state[action.channelId], {files: []}),
     };
 }
 
@@ -170,7 +164,7 @@ function handleRemoveFileFromPostDraft(state, action) {
 
     return {
         ...state,
-        [action.channelId]: Object.assign({}, state[action.channelId], {files})
+        [action.channelId]: Object.assign({}, state[action.channelId], {files}),
     };
 }
 
@@ -184,7 +178,7 @@ function handleRemoveLastFileFromPostDraft(state, action) {
 
     return {
         ...state,
-        [action.channelId]: Object.assign({}, state[action.channelId], {files})
+        [action.channelId]: Object.assign({}, state[action.channelId], {files}),
     };
 }
 
@@ -196,7 +190,7 @@ function handleRemoveFailedFilesFromPostDraft(state, action) {
     const files = state[action.channelId].files.filter((f) => !f.failed);
     return {
         ...state,
-        [action.channelId]: Object.assign({}, state[action.channelId], {files})
+        [action.channelId]: Object.assign({}, state[action.channelId], {files}),
     };
 }
 
@@ -204,8 +198,6 @@ function drafts(state = {}, action) { // eslint-disable-line complexity
     switch (action.type) {
     case ViewTypes.POST_DRAFT_CHANGED:
         return handlePostDraftChanged(state, action);
-    case ViewTypes.POST_DRAFT_SELECTION_CHANGED:
-        return handlePostDraftSelectionChanged(state, action);
     case ViewTypes.SET_POST_DRAFT:
         return handleSetPostDraft(state, action);
     case ChannelTypes.SELECT_CHANNEL:
@@ -266,28 +258,6 @@ function retryFailed(state = false, action) {
     }
 }
 
-function postVisibility(state = {}, action) {
-    switch (action.type) {
-    case ViewTypes.SET_INITIAL_POST_VISIBILITY: {
-        const nextState = {...state};
-        nextState[action.data] = ViewTypes.POST_VISIBILITY_CHUNK_SIZE;
-        return nextState;
-    }
-    case ViewTypes.INCREASE_POST_VISIBILITY: {
-        const nextState = {...state};
-        nextState[action.data] += action.amount;
-        return nextState;
-    }
-    case ViewTypes.RECEIVED_FOCUSED_POST: {
-        const nextState = {...state};
-        nextState[action.channelId] = ViewTypes.POST_VISIBILITY_CHUNK_SIZE;
-        return nextState;
-    }
-    default:
-        return state;
-    }
-}
-
 function loadingPosts(state = {}, action) {
     switch (action.type) {
     case ViewTypes.LOADING_POSTS: {
@@ -305,7 +275,7 @@ function lastGetPosts(state = {}, action) {
     case ViewTypes.RECEIVED_POSTS_FOR_CHANNEL_AT_TIME:
         return {
             ...state,
-            [action.channelId]: action.time
+            [action.channelId]: action.time,
         };
 
     default:
@@ -315,9 +285,75 @@ function lastGetPosts(state = {}, action) {
 
 function loadMorePostsVisible(state = true, action) {
     switch (action.type) {
+    case ChannelTypes.SELECT_CHANNEL:
+        return true;
     case ViewTypes.SET_LOAD_MORE_POSTS_VISIBLE:
         return action.data;
 
+    default:
+        return state;
+    }
+}
+
+function lastChannelViewTime(state = {}, action) {
+    switch (action.type) {
+    case ChannelTypes.SELECT_CHANNEL: {
+        if (action.extra?.member) {
+            const {member} = action.extra;
+            const nextState = {...state};
+            nextState[action.data] = member.last_viewed_at;
+            return nextState;
+        }
+
+        return state;
+    }
+
+    case ChannelTypes.POST_UNREAD_SUCCESS: {
+        const data = action.data;
+        return {...state, [data.channelId]: data.lastViewedAt};
+    }
+
+    default:
+        return state;
+    }
+}
+
+function keepChannelIdAsUnread(state = null, action) {
+    switch (action.type) {
+    case ChannelTypes.SELECT_CHANNEL: {
+        if (!action.extra && action.data) {
+            return {
+                id: action.data,
+                hadMentions: false,
+            };
+        }
+
+        const {channel, member} = action.extra;
+
+        if (!member || !channel) {
+            return state;
+        }
+
+        const msgCount = channel.total_msg_count - member.msg_count;
+        const hadMentions = member.mention_count > 0;
+        const hadUnreads = member.notify_props.mark_unread !== ViewTypes.NotificationLevels.MENTION && msgCount > 0;
+
+        if (hadMentions || hadUnreads) {
+            return {
+                id: member.channel_id,
+                hadMentions,
+            };
+        }
+
+        return null;
+    }
+
+    case ViewTypes.RECEIVED_FOCUSED_POST: {
+        if (state && action.channelId !== state.id) {
+            return null;
+        }
+        return state;
+    }
     default:
         return state;
     }
@@ -328,9 +364,10 @@ export default combineReducers({
     drafts,
     loading,
     refreshing,
-    postVisibility,
     loadingPosts,
     lastGetPosts,
     retryFailed,
-    loadMorePostsVisible
+    loadMorePostsVisible,
+    lastChannelViewTime,
+    keepChannelIdAsUnread,
 });

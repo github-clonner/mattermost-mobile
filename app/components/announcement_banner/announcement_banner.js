@@ -1,100 +1,99 @@
-// Copyright (c) 2018-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
-    Alert,
     Animated,
     StyleSheet,
     Text,
-    TouchableOpacity
+    TouchableOpacity,
 } from 'react-native';
 import {intlShape} from 'react-intl';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+
+import RemoveMarkdown from 'app/components/remove_markdown';
+import {paddingHorizontal as padding} from 'app/components/safe_area_view/iphone_x_spacing';
+import {goToScreen} from 'app/actions/navigation';
 
 const {View: AnimatedView} = Animated;
 
 export default class AnnouncementBanner extends PureComponent {
     static propTypes = {
-        actions: PropTypes.shape({
-            dismissBanner: PropTypes.func.isRequired
-        }).isRequired,
-        allowDismissal: PropTypes.bool,
         bannerColor: PropTypes.string,
         bannerDismissed: PropTypes.bool,
         bannerEnabled: PropTypes.bool,
         bannerText: PropTypes.string,
-        bannerTextColor: PropTypes.string
+        bannerTextColor: PropTypes.string,
+        theme: PropTypes.object.isRequired,
+        isLandscape: PropTypes.bool.isRequired,
     };
 
     static contextTypes = {
-        intl: intlShape
+        intl: intlShape,
     };
 
     state = {
-        bannerHeight: new Animated.Value(0)
+        bannerHeight: new Animated.Value(0),
     };
 
-    componentWillMount() {
+    componentDidMount() {
         const {bannerDismissed, bannerEnabled, bannerText} = this.props;
         const showBanner = bannerEnabled && !bannerDismissed && Boolean(bannerText);
         this.toggleBanner(showBanner);
     }
 
-    componentWillReceiveProps(nextProps) {
-        if (this.props.bannerText !== nextProps.bannerText ||
-            this.props.bannerEnabled !== nextProps.bannerEnabled ||
-            this.props.bannerDismissed !== nextProps.bannerDismissed) {
-            const showBanner = nextProps.bannerEnabled && !nextProps.bannerDismissed && Boolean(nextProps.bannerText);
+    componentDidUpdate(prevProps) {
+        if (this.props.bannerText !== prevProps.bannerText ||
+            this.props.bannerEnabled !== prevProps.bannerEnabled ||
+            this.props.bannerDismissed !== prevProps.bannerDismissed
+        ) {
+            const showBanner = this.props.bannerEnabled && !this.props.bannerDismissed && Boolean(this.props.bannerText);
             this.toggleBanner(showBanner);
         }
     }
 
-    handleDismiss = () => {
-        const {actions, bannerText} = this.props;
-        actions.dismissBanner(bannerText);
-    };
-
     handlePress = () => {
-        const {formatMessage} = this.context.intl;
-        const options = [{
-            text: formatMessage({id: 'mobile.announcement_banner.ok', defaultMessage: 'OK'})
-        }];
+        const {intl} = this.context;
 
-        if (this.props.allowDismissal) {
-            options.push({
-                text: formatMessage({id: 'mobile.announcement_banner.dismiss', defaultMessage: 'Dismiss'}),
-                onPress: this.handleDismiss
-            });
-        }
+        const screen = 'ExpandedAnnouncementBanner';
+        const title = intl.formatMessage({
+            id: 'mobile.announcement_banner.title',
+            defaultMessage: 'Announcement',
+        });
 
-        Alert.alert(
-            formatMessage({id: 'mobile.announcement_banner.title', defaultMessage: 'Announcement'}),
-            this.props.bannerText,
-            options,
-            {cancelable: false}
-        );
+        goToScreen(screen, title);
     };
 
     toggleBanner = (show = true) => {
         const value = show ? 38 : 0;
         Animated.timing(this.state.bannerHeight, {
             toValue: value,
-            duration: 350
+            duration: 350,
+            useNativeDriver: false,
         }).start();
     };
 
     render() {
+        if (!this.props.bannerEnabled) {
+            return null;
+        }
+
         const {bannerHeight} = this.state;
+        const {
+            bannerColor,
+            bannerText,
+            bannerTextColor,
+            isLandscape,
+        } = this.props;
 
         const bannerStyle = {
-            backgroundColor: this.props.bannerColor,
-            height: bannerHeight
+            backgroundColor: bannerColor,
+            height: bannerHeight,
         };
 
         const bannerTextStyle = {
-            color: this.props.bannerTextColor
+            color: bannerTextColor,
         };
 
         return (
@@ -103,17 +102,17 @@ export default class AnnouncementBanner extends PureComponent {
             >
                 <TouchableOpacity
                     onPress={this.handlePress}
-                    style={style.wrapper}
+                    style={[style.wrapper, padding(isLandscape)]}
                 >
                     <Text
                         ellipsizeMode='tail'
                         numberOfLines={1}
                         style={[style.bannerText, bannerTextStyle]}
                     >
-                        {this.props.bannerText}
+                        <RemoveMarkdown value={bannerText}/>
                     </Text>
                     <MaterialIcons
-                        color={this.props.bannerTextColor}
+                        color={bannerTextColor}
                         name='info'
                         size={16}
                     />
@@ -129,16 +128,16 @@ const style = StyleSheet.create({
         position: 'absolute',
         top: 0,
         overflow: 'hidden',
-        width: '100%'
+        width: '100%',
     },
     wrapper: {
         alignItems: 'center',
         flex: 1,
-        flexDirection: 'row'
+        flexDirection: 'row',
     },
     bannerText: {
         flex: 1,
         fontSize: 14,
-        marginRight: 5
-    }
+        marginRight: 5,
+    },
 });

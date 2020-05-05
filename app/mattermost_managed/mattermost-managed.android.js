@@ -1,19 +1,21 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
-import {BackHandler, NativeModules, DeviceEventEmitter} from 'react-native';
-import LocalAuth from 'react-native-local-auth';
-import JailMonkey from 'jail-monkey';
+import {NativeModules, DeviceEventEmitter} from 'react-native';
+
+import {emptyFunction} from 'app/utils/general';
 
 const {MattermostManaged} = NativeModules;
 
 const listeners = [];
-let localConfig;
+let cachedConfig = {};
+let LocalAuth;
+let JailMonkey;
 
 export default {
     addEventListener: (name, callback) => {
         const listener = DeviceEventEmitter.addListener(name, (config) => {
-            localConfig = config;
+            cachedConfig = config;
             if (callback && typeof callback === 'function') {
                 callback(config);
             }
@@ -34,33 +36,52 @@ export default {
             listeners.splice(index, 1);
         }
     },
-    authenticate: LocalAuth.authenticate,
-    blurAppScreen: MattermostManaged.blurAppScreen,
-    getConfig: MattermostManaged.getConfig,
-    getLocalConfig: async () => {
-        if (!localConfig) {
-            try {
-                localConfig = await MattermostManaged.getConfig();
-            } catch (error) {
-                // do nothing...
-            }
+    authenticate: (opts) => {
+        if (!LocalAuth) {
+            LocalAuth = require('react-native-local-auth');
         }
 
-        return localConfig || {};
+        return LocalAuth.auth(opts);
     },
+    blurAppScreen: emptyFunction,
+    appGroupIdentifier: null,
+    hasSafeAreaInsets: null,
+    isRunningInSplitView: MattermostManaged.isRunningInSplitView,
+    getConfig: async () => {
+        try {
+            cachedConfig = await MattermostManaged.getConfig();
+        } catch (error) {
+            // do nothing...
+        }
+
+        return cachedConfig;
+    },
+    getCachedConfig: () => {
+        return cachedConfig;
+    },
+    goToSecuritySettings: MattermostManaged.goToSecuritySettings,
     isDeviceSecure: async () => {
         try {
+            if (!LocalAuth) {
+                LocalAuth = require('react-native-local-auth');
+            }
+
             return await LocalAuth.isDeviceSecure();
         } catch (err) {
             return false;
         }
     },
     isTrustedDevice: () => {
-        if (__DEV__) { //eslint-disable-line no-undef
+        if (__DEV__) {
             return true;
+        }
+
+        if (!JailMonkey) {
+            JailMonkey = require('jail-monkey');
         }
 
         return JailMonkey.trustFall();
     },
-    quitApp: BackHandler.exitApp
+    supportsFaceId: async () => false,
+    quitApp: MattermostManaged.quitApp,
 };

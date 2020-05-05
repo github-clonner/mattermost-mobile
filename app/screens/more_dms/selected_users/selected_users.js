@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import PropTypes from 'prop-types';
 import React from 'react';
@@ -39,24 +39,14 @@ export default class SelectedUsers extends React.PureComponent {
         warnCount: PropTypes.number.isRequired,
 
         /*
-         * An i18n string displaying how many more users can be selected.
-         */
-        warnMessage: PropTypes.object.isRequired,
-
-        /*
          * The maximum number of users that can be selected.
          */
         maxCount: PropTypes.number.isRequired,
 
         /*
-         * An i18n string displayed when no more users can be selected.
-         */
-        maxMessage: PropTypes.object.isRequired,
-
-        /*
          * A handler function that will deselect a user when clicked on.
          */
-        onRemove: PropTypes.func.isRequired
+        onRemove: PropTypes.func.isRequired,
     };
 
     render() {
@@ -73,7 +63,7 @@ export default class SelectedUsers extends React.PureComponent {
                     theme={this.props.theme}
                     teammateNameDisplay={this.props.teammateNameDisplay}
                     onRemove={this.props.onRemove}
-                />
+                />,
             );
         }
 
@@ -88,19 +78,32 @@ export default class SelectedUsers extends React.PureComponent {
             message = (
                 <FormattedText
                     style={style.message}
-                    {...this.props.maxMessage}
+                    id='mobile.more_dms.cannot_add_more'
+                    defaultMessage='You cannot add more users'
                 />
             );
         } else if (users.length >= this.props.warnCount) {
-            message = (
-                <FormattedText
-                    style={style.message}
-                    {...this.props.warnMessage}
-                    values={{
-                        remaining: this.props.maxCount - users.length
-                    }}
-                />
-            );
+            const remaining = this.props.maxCount - users.length;
+            if (remaining === 1) {
+                message = (
+                    <FormattedText
+                        style={style.message}
+                        id='mobile.more_dms.one_more'
+                        defaultMessage='You can add 1 more user'
+                    />
+                );
+            } else {
+                message = (
+                    <FormattedText
+                        style={style.message}
+                        id='mobile.more_dms.add_more'
+                        defaultMessage='You can add {remaining, number} more users'
+                        values={{
+                            remaining,
+                        }}
+                    />
+                );
+            }
         }
 
         return (
@@ -118,19 +121,19 @@ const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
             marginLeft: 5,
-            marginBottom: 5
+            marginBottom: 5,
         },
         users: {
             alignItems: 'flex-start',
             flexDirection: 'row',
-            flexWrap: 'wrap'
+            flexWrap: 'wrap',
         },
         message: {
             color: changeOpacity(theme.centerChannelColor, 0.6),
             fontSize: 12,
             marginRight: 5,
             marginTop: 10,
-            marginBottom: 2
-        }
+            marginBottom: 2,
+        },
     };
 });

@@ -1,32 +1,32 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {connect} from 'react-redux';
 import {
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 
 import Icon from 'react-native-vector-icons/Ionicons';
 
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
-import {wrapWithPreventDoubleTap} from 'app/utils/tap';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {preventDoubleTap} from 'app/utils/tap';
 import {makeStyleSheetFromTheme} from 'app/utils/theme';
 
 class SettingDrawerButton extends PureComponent {
     static propTypes = {
-        openDrawer: PropTypes.func.isRequired,
-        theme: PropTypes.object
+        openSidebar: PropTypes.func.isRequired,
+        theme: PropTypes.object,
     };
 
     static defaultProps = {
-        theme: {}
+        theme: {},
     };
 
-    handlePress = wrapWithPreventDoubleTap(() => {
-        this.props.openDrawer();
+    handlePress = preventDoubleTap(() => {
+        this.props.openSidebar();
     });
 
     render() {
@@ -57,25 +57,25 @@ class SettingDrawerButton extends PureComponent {
 const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
-            width: 44
+            width: 44,
         },
         wrapper: {
             alignItems: 'center',
             flex: 1,
             flexDirection: 'column',
             justifyContent: 'center',
-            marginLeft: 8
+            marginLeft: 8,
         },
         mention: {
             color: theme.mentionColor,
-            fontSize: 10
-        }
+            fontSize: 10,
+        },
     };
 });
 
 function mapStateToProps(state) {
     return {
-        theme: getTheme(state)
+        theme: getTheme(state),
     };
 }
 

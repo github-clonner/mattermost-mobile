@@ -1,222 +1,245 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
-import {injectIntl, intlShape} from 'react-intl';
-import {
-    Platform,
-    InteractionManager,
-    View
-} from 'react-native';
+import {intlShape} from 'react-intl';
+import {Platform, View, Text} from 'react-native';
+import Icon from 'react-native-vector-icons/FontAwesome';
+import {Navigation} from 'react-native-navigation';
 
-import {General, RequestStatus} from 'mattermost-redux/constants';
-import EventEmitter from 'mattermost-redux/utils/event_emitter';
+import {debounce} from '@mm-redux/actions/helpers';
+import {General} from '@mm-redux/constants';
+import EventEmitter from '@mm-redux/utils/event_emitter';
 
+import {paddingHorizontal as padding} from 'app/components/safe_area_view/iphone_x_spacing';
+import BottomSheet from 'app/utils/bottom_sheet';
 import CustomList from 'app/components/custom_list';
 import ChannelListRow from 'app/components/custom_list/channel_list_row';
+import FormattedText from 'app/components/formatted_text';
+import KeyboardLayout from 'app/components/layout/keyboard_layout';
 import Loading from 'app/components/loading';
 import SearchBar from 'app/components/search_bar';
 import StatusBar from 'app/components/status_bar';
-import {alertErrorWithFallback} from 'app/utils/general';
-import {changeOpacity, makeStyleSheetFromTheme, setNavigatorStyles} from 'app/utils/theme';
+import {NavigationTypes} from 'app/constants';
+import {alertErrorWithFallback, emptyFunction} from 'app/utils/general';
+import {goToScreen, dismissModal, setButtons} from 'app/actions/navigation';
+import {
+    changeOpacity,
+    makeStyleSheetFromTheme,
+    getKeyboardAppearanceFromTheme,
+} from 'app/utils/theme';
 
-class MoreChannels extends PureComponent {
+export default class MoreChannels extends PureComponent {
     static propTypes = {
-        intl: intlShape.isRequired,
-        currentUserId: PropTypes.string.isRequired,
-        currentTeamId: PropTypes.string.isRequired,
-        navigator: PropTypes.object,
-        theme: PropTypes.object.isRequired,
-        canCreateChannels: PropTypes.bool.isRequired,
-        channels: PropTypes.array,
-        closeButton: PropTypes.object,
-        requestStatus: PropTypes.object.isRequired,
         actions: PropTypes.shape({
+            getArchivedChannels: PropTypes.func.isRequired,
+            getChannels: PropTypes.func.isRequired,
             handleSelectChannel: PropTypes.func.isRequired,
             joinChannel: PropTypes.func.isRequired,
-            getChannels: PropTypes.func.isRequired,
             searchChannels: PropTypes.func.isRequired,
-            setChannelDisplayName: PropTypes.func.isRequired
-        }).isRequired
+            setChannelDisplayName: PropTypes.func.isRequired,
+        }).isRequired,
+        componentId: PropTypes.string,
+        canCreateChannels: PropTypes.bool.isRequired,
+        channels: PropTypes.array,
+        archivedChannels: PropTypes.array,
+        closeButton: PropTypes.object,
+        currentUserId: PropTypes.string.isRequired,
+        currentTeamId: PropTypes.string.isRequired,
+        theme: PropTypes.object.isRequired,
+        isLandscape: PropTypes.bool.isRequired,
+        canShowArchivedChannels: PropTypes.bool.isRequired,
     };
 
-    leftButton = {
-        id: 'close-more-channels'
+    static defaultProps = {
+        channels: [],
     };
 
-    rightButton = {
-        id: 'create-pub-channel',
-        showAsAction: 'always'
+    static contextTypes = {
+        intl: intlShape.isRequired,
     };
 
-    constructor(props) {
-        super(props);
+    constructor(props, context) {
+        super(props, context);
 
         this.searchTimeoutId = 0;
+        this.publicPage = -1;
+        this.archivedPage = -1;
+        this.nextPublic = true;
+        this.nextArchived = true;
+        this.mounted = false;
 
         this.state = {
             channels: props.channels.slice(0, General.CHANNELS_CHUNK_SIZE),
-            createScreenVisible: false,
-            page: 0,
+            archivedChannels: props.archivedChannels.slice(0, General.CHANNELS_CHUNK_SIZE),
+            typeOfChannels: 'public',
+            loading: false,
             adding: false,
-            next: true,
-            searching: false,
-            showNoResults: false,
-            term: ''
-        };
-        this.rightButton.title = props.intl.formatMessage({id: 'mobile.create_channel', defaultMessage: 'Create'});
-        this.leftButton = {...this.leftButton, icon: props.closeButton};
-
-        const buttons = {
-            leftButtons: [this.leftButton]
+            term: '',
         };
 
-        if (props.canCreateChannels) {
-            buttons.rightButtons = [this.rightButton];
-        }
+        this.rightButton = {
+            color: props.theme.sidebarHeaderTextColor,
+            id: 'create-pub-channel',
+            text: context.intl.formatMessage({id: 'mobile.create_channel', defaultMessage: 'Create'}),
+            showAsAction: 'always',
+        };
 
-        props.navigator.setOnNavigatorEvent(this.onNavigatorEvent);
-        props.navigator.setButtons(buttons);
-    }
-
-    componentWillMount() {
-        EventEmitter.on('closing-create-channel', this.handleCreateScreenVisible);
+        this.leftButton = {
+            id: 'close-more-channels',
+            icon: props.closeButton,
+        };
     }
 
     componentDidMount() {
-        // set the timeout to 400 cause is the time that the modal takes to open
-        // Somehow interactionManager doesn't care
-        setTimeout(() => {
-            this.props.actions.getChannels(this.props.currentTeamId, 0);
-        }, 400);
-    }
-
-    componentWillReceiveProps(nextProps) {
-        if (this.props.theme !== nextProps.theme) {
-            setNavigatorStyles(this.props.navigator, nextProps.theme);
-        }
-
-        const {requestStatus} = this.props;
-        if (this.state.searching &&
-            nextProps.requestStatus.status === RequestStatus.SUCCESS) {
-            const channels = this.filterChannels(nextProps.channels, this.state.term);
-            this.setState({channels, showNoResults: true});
-        } else if (requestStatus.status === RequestStatus.STARTED &&
-            nextProps.requestStatus.status === RequestStatus.SUCCESS) {
-            const {page} = this.state;
-            const channels = nextProps.channels.slice(0, (page + 1) * General.CHANNELS_CHUNK_SIZE);
-            this.setState({channels, showNoResults: true});
-        }
-
-        if (!this.state.createScreenVisible) {
-            this.headerButtons(nextProps.canCreateChannels, true);
-        }
+        this.navigationEventListener = Navigation.events().bindComponent(this);
+        this.mounted = true;
+        this.setHeaderButtons(this.props.canCreateChannels);
+        this.doGetChannels();
     }
 
     componentWillUnmount() {
-        EventEmitter.off('closing-create-channel', this.handleCreateScreenVisible);
+        this.mounted = false;
     }
 
-    close = () => {
-        this.props.navigator.dismissModal({animationType: 'slide-down'});
-    };
+    componentWillReceiveProps(nextProps) {
+        const {term} = this.state;
+        let channels;
+        let archivedChannels;
 
-    emitCanCreateChannel = (enabled) => {
-        this.headerButtons(this.props.canCreateChannels, enabled);
-    };
-
-    handleCreateScreenVisible = (createScreenVisible) => {
-        this.setState({createScreenVisible});
-    };
-
-    headerButtons = (canCreateChannels, enabled) => {
-        const buttons = {
-            leftButtons: [this.leftButton]
-        };
-
-        if (canCreateChannels) {
-            buttons.rightButtons = [{...this.rightButton, disabled: !enabled}];
+        if (nextProps.channels !== this.props.channels) {
+            channels = nextProps.channels;
+            if (term) {
+                channels = this.filterChannels(nextProps.channels, term);
+            }
         }
 
-        this.props.navigator.setButtons(buttons);
-    };
-
-    filterChannels = (channels, term) => {
-        return channels.filter((c) => {
-            return (c.name.toLowerCase().indexOf(term) !== -1 || c.display_name.toLowerCase().indexOf(term) !== -1);
-        });
-    };
-
-    searchProfiles = (text) => {
-        const term = text.toLowerCase();
-
-        if (term) {
-            const channels = this.filterChannels(this.state.channels, term);
-            this.setState({
-                channels,
-                term: text,
-                searching: true
-            });
-            clearTimeout(this.searchTimeoutId);
-
-            this.searchTimeoutId = setTimeout(() => {
-                this.props.actions.searchChannels(this.props.currentTeamId, term);
-            }, General.SEARCH_TIMEOUT_MILLISECONDS);
-        } else {
-            this.cancelSearch();
+        if (nextProps.archivedChannels !== this.props.archivedChannels) {
+            archivedChannels = nextProps.archivedChannels;
+            if (term) {
+                archivedChannels = this.filterChannels(nextProps.archivedChannels, term);
+            }
         }
-    };
+
+        const nextState = {};
+        if (channels) {
+            nextState.channels = channels;
+        }
+
+        if (archivedChannels) {
+            nextState.archivedChannels = archivedChannels;
+        }
+
+        if (nextState.archivedChannels || nextState.channels) {
+            this.setState(nextState);
+        }
+    }
+
+    navigationButtonPressed({buttonId}) {
+        switch (buttonId) {
+        case 'close-more-channels':
+            this.close();
+            break;
+        case 'create-pub-channel':
+            this.onCreateChannel();
+            break;
+        }
+    }
+
+    setSearchBarRef = (ref) => {
+        this.searchBarRef = ref;
+    }
 
     cancelSearch = () => {
-        this.props.actions.getChannels(this.props.currentTeamId, 0);
+        const {channels, archivedChannels} = this.props;
+
         this.setState({
+            channels,
+            archivedChannels,
             term: '',
-            searching: false,
-            page: 0
         });
     };
 
-    loadMoreChannels = () => {
-        let {page} = this.state;
-        if (this.props.requestStatus.status !== RequestStatus.STARTED && this.state.next && !this.state.searching) {
-            page = page + 1;
-            this.props.actions.getChannels(
-                this.props.currentTeamId,
-                page,
-                General.CHANNELS_CHUNK_SIZE
-            ).then(({data}) => {
-                if (data && data.length) {
-                    this.setState({
-                        page
-                    });
-                } else {
-                    this.setState({next: false});
+    close = () => {
+        dismissModal();
+    };
+
+    doGetChannels = () => {
+        const {actions, currentTeamId, canShowArchivedChannels} = this.props;
+        const {loading, term, typeOfChannels} = this.state;
+
+        if (!loading && !term && this.mounted) {
+            this.setState({loading: true}, () => {
+                switch (typeOfChannels) {
+                case 'public':
+                    if (this.nextPublic) {
+                        actions.getChannels(
+                            currentTeamId,
+                            this.publicPage + 1,
+                            General.CHANNELS_CHUNK_SIZE,
+                        ).then(this.loadedChannels);
+                    }
+                    break;
+                case 'archived':
+                    if (canShowArchivedChannels && this.nextArchived) {
+                        actions.getArchivedChannels(
+                            currentTeamId,
+                            this.archivedPage + 1,
+                            General.CHANNELS_CHUNK_SIZE,
+                        ).then(this.loadedChannels);
+                    }
+                    break;
                 }
             });
         }
     };
 
-    onNavigatorEvent = (event) => {
-        if (event.type === 'NavBarButtonPress') {
-            switch (event.id) {
-            case 'close-more-channels':
-                this.close();
-                break;
-            case 'create-pub-channel':
-                this.setState({
-                    createScreenVisible: true
-                }, this.onCreateChannel);
-                break;
+    filterChannels = (channels, term) => {
+        const lowerCasedTerm = term.toLowerCase();
+        return channels.filter((c) => {
+            return (c.name.toLowerCase().includes(lowerCasedTerm) || c.display_name.toLowerCase().includes(lowerCasedTerm));
+        });
+    };
+
+    getChannels = debounce(this.doGetChannels, 100);
+
+    setHeaderButtons = (createEnabled) => {
+        const {canCreateChannels, componentId} = this.props;
+        const buttons = {
+            leftButtons: [this.leftButton],
+        };
+
+        if (canCreateChannels) {
+            buttons.rightButtons = [{...this.rightButton, enabled: createEnabled}];
+        }
+
+        setButtons(componentId, buttons);
+    };
+
+    loadedChannels = ({data}) => {
+        if (this.mounted) {
+            const {typeOfChannels} = this.state;
+            const isPublic = typeOfChannels === 'public';
+
+            if (isPublic) {
+                this.publicPage += 1;
+                this.nextPublic = data?.length > 0;
+            } else {
+                this.archivedPage += 1;
+                this.nextArchived = data?.length > 0;
             }
+
+            this.setState({loading: false});
         }
     };
 
     onSelectChannel = async (id) => {
-        const {actions, currentTeamId, currentUserId, intl} = this.props;
+        const {intl} = this.context;
+        const {actions, currentTeamId, currentUserId} = this.props;
         const {channels} = this.state;
 
-        this.emitCanCreateChannel(false);
+        this.setHeaderButtons(false);
         this.setState({adding: true});
 
         const channel = channels.find((c) => c.id === id);
@@ -228,13 +251,13 @@ class MoreChannels extends PureComponent {
                 result.error,
                 {
                     id: 'mobile.join_channel.error',
-                    defaultMessage: "We couldn't join the channel {displayName}. Please check your connection and try again."
+                    defaultMessage: "We couldn't join the channel {displayName}. Please check your connection and try again.",
                 },
                 {
-                    displayName: channel ? channel.display_name : ''
-                }
+                    displayName: channel ? channel.display_name : '',
+                },
             );
-            this.emitCanCreateChannel(true);
+            this.setHeaderButtons(true);
             this.setState({adding: false});
         } else {
             if (channel) {
@@ -244,117 +267,274 @@ class MoreChannels extends PureComponent {
             }
             await actions.handleSelectChannel(id);
 
-            EventEmitter.emit('close_channel_drawer');
-            InteractionManager.runAfterInteractions(() => {
+            EventEmitter.emit(NavigationTypes.CLOSE_MAIN_SIDEBAR);
+            requestAnimationFrame(() => {
                 this.close();
             });
         }
     };
 
     onCreateChannel = () => {
-        const {intl, navigator, theme} = this.props;
+        const {formatMessage} = this.context.intl;
 
-        navigator.push({
-            screen: 'CreateChannel',
-            animationType: 'slide-up',
-            title: intl.formatMessage({id: 'mobile.create_channel.public', defaultMessage: 'New Public Channel'}),
-            backButtonTitle: '',
-            animated: true,
-            navigatorStyle: {
-                navBarTextColor: theme.sidebarHeaderTextColor,
-                navBarBackgroundColor: theme.sidebarHeaderBg,
-                navBarButtonColor: theme.sidebarHeaderTextColor,
-                screenBackgroundColor: theme.centerChannelBg
-            },
-            passProps: {
-                channelType: General.OPEN_CHANNEL
-            }
-        });
+        const screen = 'CreateChannel';
+        const title = formatMessage({id: 'mobile.create_channel.public', defaultMessage: 'New Public Channel'});
+        const passProps = {
+            channelType: General.OPEN_CHANNEL,
+        };
+
+        goToScreen(screen, title, passProps);
     };
 
-    render() {
-        const {intl, requestStatus, theme} = this.props;
-        const {adding, channels, searching, term} = this.state;
-        const {formatMessage} = intl;
-        const isLoading = requestStatus.status === RequestStatus.STARTED || requestStatus.status === RequestStatus.NOT_STARTED;
+    renderLoading = () => {
+        const {theme} = this.props;
+        const {typeOfChannels} = this.state;
         const style = getStyleFromTheme(theme);
-        const more = searching ? () => true : this.loadMoreChannels;
 
-        let content;
-        if (adding) {
-            content = (<Loading/>);
-        } else {
-            content = (
-                <View style={{flex: 1}}>
-                    <View
-                        style={{marginVertical: 5}}
-                    >
-                        <SearchBar
-                            ref='search_bar'
-                            placeholder={formatMessage({id: 'search_bar.search', defaultMessage: 'Search'})}
-                            cancelTitle={formatMessage({id: 'mobile.post.cancel', defaultMessage: 'Cancel'})}
-                            backgroundColor='transparent'
-                            inputHeight={33}
-                            inputStyle={{
-                                backgroundColor: changeOpacity(theme.centerChannelColor, 0.2),
-                                color: theme.centerChannelColor,
-                                fontSize: 15,
-                                lineHeight: 66
-                            }}
-                            placeholderTextColor={changeOpacity(theme.centerChannelColor, 0.5)}
-                            tintColorSearch={changeOpacity(theme.centerChannelColor, 0.5)}
-                            tintColorDelete={changeOpacity(theme.centerChannelColor, 0.5)}
-                            titleCancelColor={theme.centerChannelColor}
-                            onChangeText={this.searchProfiles}
-                            onSearchButtonPress={this.searchProfiles}
-                            onCancelButtonPress={this.cancelSearch}
-                            value={term}
-                        />
-                    </View>
-                    <CustomList
-                        data={channels}
-                        theme={theme}
-                        searching={searching}
-                        onListEndReached={more}
-                        loading={isLoading}
-                        listScrollRenderAheadDistance={50}
-                        showSections={false}
-                        renderRow={ChannelListRow}
-                        onRowPress={this.onSelectChannel}
-                        loadingText={{id: 'mobile.loading_channels', defaultMessage: 'Loading Channels...'}}
-                        showNoResults={this.state.showNoResults}
+        if ((typeOfChannels === 'public' && !this.nextPublic) ||
+            (typeOfChannels === 'archived' && !this.nextArchived)) {
+            return null;
+        }
+
+        return (
+            <View style={style.loadingContainer}>
+                <FormattedText
+                    id='mobile.loading_channels'
+                    defaultMessage='Loading Channels...'
+                    style={style.loadingText}
+                />
+            </View>
+        );
+    };
+
+    renderNoResults = () => {
+        const {term, loading} = this.state;
+        const {theme} = this.props;
+        const style = getStyleFromTheme(theme);
+
+        if (loading) {
+            return null;
+        }
+
+        if (term) {
+            return (
+                <View style={style.noResultContainer}>
+                    <FormattedText
+                        id='mobile.custom_list.no_results'
+                        defaultMessage='No Results'
+                        style={style.noResultText}
                     />
                 </View>
             );
         }
 
         return (
-            <View style={style.container}>
+            <View style={style.noResultContainer}>
+                <FormattedText
+                    id='more_channels.noMore'
+                    defaultMessage='No more channels to join'
+                    style={style.noResultText}
+                />
+            </View>
+        );
+    };
+
+    renderItem = (props) => {
+        return (
+            <ChannelListRow
+                {...props}
+                isArchived={this.state.typeOfChannels === 'archived'}
+            />
+        );
+    }
+
+    searchChannels = (text) => {
+        const {actions, channels, archivedChannels, currentTeamId, canShowArchivedChannels} = this.props;
+        const {typeOfChannels} = this.state;
+
+        if (text) {
+            if (typeOfChannels === 'public') {
+                const filtered = this.filterChannels(channels, text);
+                this.setState({
+                    channels: filtered,
+                    term: text,
+                });
+                clearTimeout(this.searchTimeoutId);
+            } else if (typeOfChannels === 'archived' && canShowArchivedChannels) {
+                const filtered = this.filterChannels(archivedChannels, text);
+                this.setState({
+                    archivedChannels: filtered,
+                    term: text,
+                });
+                clearTimeout(this.searchTimeoutId);
+            }
+            this.searchTimeoutId = setTimeout(() => {
+                actions.searchChannels(currentTeamId, text.toLowerCase(), typeOfChannels === 'archived');
+            }, General.SEARCH_TIMEOUT_MILLISECONDS);
+        } else {
+            this.cancelSearch();
+        }
+    };
+
+    handleDropdownClick = () => {
+        const {formatMessage} = this.context.intl;
+        const publicChannelsText = formatMessage({id: 'more_channels.publicChannels', defaultMessage: 'Public Channels'});
+        const archivedChannelsText = formatMessage({id: 'more_channels.archivedChannels', defaultMessage: 'Archived Channels'});
+        const titleText = formatMessage({id: 'more_channels.dropdownTitle', defaultMessage: 'Show'});
+        const cancelText = 'Cancel';
+        BottomSheet.showBottomSheetWithOptions({
+            options: [publicChannelsText, archivedChannelsText, cancelText],
+            cancelButtonIndex: 2,
+            title: titleText,
+        }, (value) => {
+            let typeOfChannels;
+            switch (value) {
+            case 0:
+                typeOfChannels = 'public';
+                break;
+            case 1:
+                typeOfChannels = 'archived';
+                break;
+            default:
+                typeOfChannels = this.state.typeOfChannels;
+            }
+
+            if (typeOfChannels !== this.state.typeOfChannels) {
+                this.setState({typeOfChannels, loading: false}, this.doGetChannels);
+            }
+        });
+    }
+
+    render() {
+        const {formatMessage} = this.context.intl;
+        const {theme, isLandscape, canShowArchivedChannels} = this.props;
+        const {adding, channels, archivedChannels, loading, term, typeOfChannels} = this.state;
+        const more = term ? emptyFunction : this.getChannels;
+        const style = getStyleFromTheme(theme);
+
+        const publicChannelsText = formatMessage({id: 'more_channels.showPublicChannels', defaultMessage: 'Show: Public Channels'});
+        const archivedChannelsText = formatMessage({id: 'more_channels.showArchivedChannels', defaultMessage: 'Show: Archived Channels'});
+
+        let content;
+        if (adding) {
+            content = (<Loading color={theme.centerChannelColor}/>);
+        } else {
+            const searchBarInput = {
+                backgroundColor: changeOpacity(theme.centerChannelColor, 0.2),
+                color: theme.centerChannelColor,
+                fontSize: 15,
+            };
+
+            let activeChannels = channels;
+
+            if (canShowArchivedChannels && typeOfChannels === 'archived') {
+                activeChannels = archivedChannels;
+            }
+
+            let channelDropdown;
+            if (canShowArchivedChannels) {
+                channelDropdown = (
+                    <View style={[style.titleContainer, padding(isLandscape)]}>
+                        <Text
+                            accessibilityRole={'button'}
+                            style={style.channelDropdown}
+                            onPress={this.handleDropdownClick}
+                        >
+                            {typeOfChannels === 'public' ? publicChannelsText : archivedChannelsText}
+                            {'  '}
+                            <Icon
+                                name={'caret-down'}
+                            />
+                        </Text>
+                    </View>
+                );
+            }
+
+            content = (
+                <React.Fragment>
+                    <View style={[style.searchBar, padding(isLandscape)]}>
+                        <SearchBar
+                            ref={this.setSearchBarRef}
+                            placeholder={formatMessage({id: 'search_bar.search', defaultMessage: 'Search'})}
+                            cancelTitle={formatMessage({id: 'mobile.post.cancel', defaultMessage: 'Cancel'})}
+                            backgroundColor='transparent'
+                            inputHeight={33}
+                            inputStyle={searchBarInput}
+                            placeholderTextColor={changeOpacity(theme.centerChannelColor, 0.5)}
+                            tintColorSearch={changeOpacity(theme.centerChannelColor, 0.5)}
+                            tintColorDelete={changeOpacity(theme.centerChannelColor, 0.5)}
+                            titleCancelColor={theme.centerChannelColor}
+                            onChangeText={this.searchChannels}
+                            onSearchButtonPress={this.searchChannels}
+                            onCancelButtonPress={this.cancelSearch}
+                            autoCapitalize='none'
+                            keyboardAppearance={getKeyboardAppearanceFromTheme(theme)}
+                            value={term}
+                        />
+                    </View>
+                    {channelDropdown}
+                    <CustomList
+                        canRefresh={false}
+                        data={activeChannels}
+                        extraData={loading}
+                        key='custom_list'
+                        loading={loading}
+                        loadingComponent={this.renderLoading()}
+                        noResults={this.renderNoResults()}
+                        onLoadMore={more}
+                        onRowPress={this.onSelectChannel}
+                        renderItem={this.renderItem}
+                        theme={theme}
+                    />
+                </React.Fragment>
+            );
+        }
+
+        return (
+            <KeyboardLayout>
                 <StatusBar/>
                 {content}
-            </View>
+            </KeyboardLayout>
         );
     }
 }
 
 const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
     return {
-        container: {
-            flex: 1,
-            backgroundColor: theme.centerChannelBg
-        },
-        navTitle: {
+        searchBar: {
+            marginVertical: 5,
+            height: 38,
             ...Platform.select({
-                android: {
-                    fontSize: 18
-                },
                 ios: {
-                    fontSize: 15,
-                    fontWeight: 'bold'
-                }
-            })
-        }
+                    paddingLeft: 8,
+                },
+            }),
+        },
+        loadingContainer: {
+            alignItems: 'center',
+            backgroundColor: theme.centerChannelBg,
+            height: 70,
+            justifyContent: 'center',
+        },
+        loadingText: {
+            color: changeOpacity(theme.centerChannelColor, 0.6),
+        },
+        noResultContainer: {
+            flexGrow: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        noResultText: {
+            fontSize: 26,
+            color: changeOpacity(theme.centerChannelColor, 0.5),
+        },
+        channelDropdown: {
+            color: theme.centerChannelColor,
+            fontWeight: 'bold',
+            marginLeft: 10,
+            marginTop: 20,
+            marginBottom: 10,
+        },
     };
 });
-
-export default injectIntl(MoreChannels);

@@ -1,8 +1,8 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 // Credit to http://semplicewebsites.com/removing-accents-javascript
 
-var latinMap = {
+const latinMap = {
     Á: 'A', // LATIN CAPITAL LETTER A WITH ACUTE
     Ă: 'A', // LATIN CAPITAL LETTER A WITH BREVE
     Ắ: 'A', // LATIN CAPITAL LETTER A WITH BREVE AND ACUTE
@@ -991,7 +991,7 @@ var latinMap = {
     // CANNOT FIND APPROXIMATION FOR 'LATIN SUBSCRIPT SMALL LETTER SCHWA' (ₔ)
     ᵤ: 'u', // LATIN SUBSCRIPT SMALL LETTER U
     ᵥ: 'v', // LATIN SUBSCRIPT SMALL LETTER V
-    ₓ: 'x' // LATIN SUBSCRIPT SMALL LETTER X
+    ₓ: 'x', // LATIN SUBSCRIPT SMALL LETTER X
 };
 
 export function map(x) {

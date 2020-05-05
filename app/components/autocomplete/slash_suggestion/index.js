@@ -1,14 +1,15 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 import {createSelector} from 'reselect';
 
-import {getAutocompleteCommands} from 'mattermost-redux/actions/integrations';
-import {getAutocompleteCommandsList} from 'mattermost-redux/selectors/entities/integrations';
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
-import {getCurrentTeamId} from 'mattermost-redux/selectors/entities/teams';
+import {getAutocompleteCommands} from '@mm-redux/actions/integrations';
+import {getAutocompleteCommandsList} from '@mm-redux/selectors/entities/integrations';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {getCurrentTeamId} from '@mm-redux/selectors/entities/teams';
+import {isLandscape} from 'app/selectors/device';
 
 import SlashSuggestion from './slash_suggestion';
 
@@ -22,23 +23,23 @@ const mobileCommandsSelector = createSelector(
     getAutocompleteCommandsList,
     (commands) => {
         return commands.filter((command) => !COMMANDS_TO_HIDE_ON_MOBILE.includes(command.trigger));
-    }
+    },
 );
 
 function mapStateToProps(state) {
     return {
         commands: mobileCommandsSelector(state),
-        commandsRequest: state.requests.integrations.getAutocompleteCommands,
         currentTeamId: getCurrentTeamId(state),
-        theme: getTheme(state)
+        theme: getTheme(state),
+        isLandscape: isLandscape(state),
     };
 }
 
 function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
-            getAutocompleteCommands
-        }, dispatch)
+            getAutocompleteCommands,
+        }, dispatch),
     };
 }
 

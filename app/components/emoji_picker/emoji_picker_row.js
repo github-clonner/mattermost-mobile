@@ -1,12 +1,12 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {Component} from 'react';
 import PropTypes from 'prop-types';
 import {
     StyleSheet,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import shallowEqual from 'shallow-equals';
 
@@ -17,7 +17,7 @@ export default class EmojiPickerRow extends Component {
         emojiGutter: PropTypes.number.isRequired,
         emojiSize: PropTypes.number.isRequired,
         items: PropTypes.array.isRequired,
-        onEmojiPress: PropTypes.func.isRequired
+        onEmojiPress: PropTypes.func.isRequired,
     }
 
     shouldComponentUpdate(nextProps) {
@@ -27,13 +27,14 @@ export default class EmojiPickerRow extends Component {
     renderEmojis = (emoji, index, emojis) => {
         const {emojiGutter, emojiSize} = this.props;
 
+        const size = emojiSize + 7;
         const style = [
             styles.emoji,
             {
-                width: emojiSize,
-                height: emojiSize,
-                marginHorizontal: emojiGutter
-            }
+                width: size,
+                height: size,
+                marginHorizontal: emojiGutter,
+            },
         ];
         if (index === 0) {
             style.push(styles.emojiLeft);
@@ -60,11 +61,12 @@ export default class EmojiPickerRow extends Component {
             >
                 <Emoji
                     emojiName={emoji.name}
+                    textStyle={styles.emojiText}
                     size={emojiSize}
                 />
             </TouchableOpacity>
         );
-    }
+    };
 
     render() {
         const {emojiGutter, items} = this.props;
@@ -79,18 +81,23 @@ export default class EmojiPickerRow extends Component {
 
 const styles = StyleSheet.create({
     columnStyle: {
-        alignSelf: 'stretch',
+        flex: 1,
         flexDirection: 'row',
-        justifyContent: 'space-between'
+        justifyContent: 'space-between',
     },
     emoji: {
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        overflow: 'hidden',
+    },
+    emojiText: {
+        color: '#000',
+        fontWeight: 'bold',
     },
     emojiLeft: {
-        marginLeft: 0
+        marginLeft: 0,
     },
     emojiRight: {
-        marginRight: 0
-    }
+        marginRight: 0,
+    },
 });

@@ -1,9 +1,11 @@
-// Copyright (c) 2018-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {createSelector} from 'reselect';
 
-import {getCurrentUserId, getUser} from 'mattermost-redux/selectors/entities/users';
+import {getCurrentUserId, getUser} from '@mm-redux/selectors/entities/users';
+import {getChannelByName} from '@mm-redux/selectors/entities/channels';
+import {getTeamByName} from '@mm-redux/selectors/entities/teams';
 
 const getOtherUserIdForDm = createSelector(
     (state, channel) => channel,
@@ -14,7 +16,7 @@ const getOtherUserIdForDm = createSelector(
         }
 
         return channel.name.split('__').find((m) => m !== currentUserId) || currentUserId;
-    }
+    },
 );
 
 export const getChannelMembersForDm = createSelector(
@@ -25,5 +27,24 @@ export const getChannelMembersForDm = createSelector(
         }
 
         return [otherUser];
-    }
+    },
+);
+
+export const getChannelNameForSearchAutocomplete = createSelector(
+    (state, channelId) => state.entities.channels.channels[channelId],
+    (channel) => {
+        if (channel && channel.display_name) {
+            return channel.display_name;
+        }
+        return '';
+    },
+);
+
+const getTeam = (state, channelName, teamName) => getTeamByName(state, teamName);
+const getChannel = (state, channelName) => getChannelByName(state, channelName);
+
+export const getChannelReachable = createSelector(
+    getTeam,
+    getChannel,
+    (team, channel) => team && channel,
 );

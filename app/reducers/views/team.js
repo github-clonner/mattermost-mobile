@@ -1,8 +1,8 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {combineReducers} from 'redux';
-import {TeamTypes} from 'mattermost-redux/action_types';
+import {ChannelTypes, TeamTypes} from '@mm-redux/action_types';
 
 import {ViewTypes} from 'app/constants';
 
@@ -15,34 +15,62 @@ function lastTeamId(state = '', action) {
     }
 }
 
+function setLastChannelForTeam(state, teamId, channel) {
+    if (!channel?.id) {
+        return state;
+    }
+
+    const team = state[channel.team_id || teamId];
+    const channelIds = [];
+
+    if (team) {
+        channelIds.push(...team);
+        const index = channelIds.indexOf(channel.id);
+        if (index === -1) {
+            channelIds.unshift(channel.id);
+            channelIds.slice(0, 5);
+        } else {
+            channelIds.splice(index, 1);
+            channelIds.unshift(channel.id);
+        }
+    } else {
+        channelIds.push(channel.id);
+    }
+
+    return {
+        ...state,
+        [teamId]: channelIds,
+    };
+}
+
 function lastChannelForTeam(state = {}, action) {
     switch (action.type) {
-    case ViewTypes.SET_LAST_CHANNEL_FOR_TEAM: {
-        const team = state[action.teamId];
-        const channelIds = [];
+    case ChannelTypes.SELECT_CHANNEL: {
+        return setLastChannelForTeam(state, action.extra?.teamId, action.extra?.channel);
+    }
 
-        if (!action.channelId) {
+    case ViewTypes.REMOVE_LAST_CHANNEL_FOR_TEAM: {
+        const {data} = action;
+        const team = state[data.teamId];
+
+        if (!data.channelId) {
             return state;
         }
 
         if (team) {
-            channelIds.push(...team);
-            const index = channelIds.indexOf(action.channelId);
-            if (index === -1) {
-                channelIds.unshift(action.channelId);
-                channelIds.slice(0, 5);
-            } else {
+            const channelIds = [...team];
+            const index = channelIds.indexOf(data.channelId);
+            if (index !== -1) {
                 channelIds.splice(index, 1);
-                channelIds.unshift(action.channelId);
             }
-        } else {
-            channelIds.push(action.channelId);
+
+            return {
+                ...state,
+                [data.teamId]: channelIds,
+            };
         }
 
-        return {
-            ...state,
-            [action.teamId]: channelIds
-        };
+        return state;
     }
     default:
         return state;
@@ -51,5 +79,5 @@ function lastChannelForTeam(state = {}, action) {
 
 export default combineReducers({
     lastTeamId,
-    lastChannelForTeam
+    lastChannelForTeam,
 });

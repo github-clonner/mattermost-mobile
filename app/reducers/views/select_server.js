@@ -1,5 +1,5 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {combineReducers} from 'redux';
 
@@ -18,5 +18,5 @@ function serverUrl(state = Config.DefaultServerUrl, action) {
 }
 
 export default combineReducers({
-    serverUrl
+    serverUrl,
 });

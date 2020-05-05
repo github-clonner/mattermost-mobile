@@ -1,11 +1,13 @@
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
-import {logError} from 'mattermost-redux/actions/errors';
+import {logError} from '@mm-redux/actions/errors';
 
 import {setLastUpgradeCheck} from 'app/actions/views/client_upgrade';
 import getClientUpgrade from 'app/selectors/client_upgrade';
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
 
 import ClientUpgrade from './client_upgrade';
 
@@ -18,7 +20,7 @@ function mapStateToProps(state) {
         forceUpgrade,
         latestVersion,
         minVersion,
-        theme: getTheme(state)
+        theme: getTheme(state),
     };
 }
 
@@ -26,8 +28,8 @@ function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
             logError,
-            setLastUpgradeCheck
-        }, dispatch)
+            setLastUpgradeCheck,
+        }, dispatch),
     };
 }
 

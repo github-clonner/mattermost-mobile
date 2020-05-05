@@ -1,204 +1,210 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
-    ActivityIndicator,
-    Animated,
     View,
-    Image,
-    StyleSheet
+    StyleSheet,
 } from 'react-native';
+import FastImage from 'react-native-fast-image';
 
-import {Client4} from 'mattermost-redux/client';
+import {Client4} from '@mm-redux/client';
 
-import imageIcon from 'assets/images/icons/image.png';
+import ProgressiveImage from '@components/progressive_image';
+import {isGif} from '@utils/file';
+import {changeOpacity} from '@utils/theme';
 
-const {View: AnimatedView} = Animated;
+import brokenImageIcon from 'assets/images/icons/brokenimage.png';
+
+const SMALL_IMAGE_MAX_HEIGHT = 48;
+const SMALL_IMAGE_MAX_WIDTH = 48;
 
 const IMAGE_SIZE = {
     Fullsize: 'fullsize',
     Preview: 'preview',
-    Thumbnail: 'thumbnail'
+    Thumbnail: 'thumbnail',
 };
 
 export default class FileAttachmentImage extends PureComponent {
     static propTypes = {
-        addFileToFetchCache: PropTypes.func.isRequired,
-        fetchCache: PropTypes.object.isRequired,
-        file: PropTypes.object,
+        file: PropTypes.object.isRequired,
         imageHeight: PropTypes.number,
         imageSize: PropTypes.oneOf([
             IMAGE_SIZE.Fullsize,
             IMAGE_SIZE.Preview,
-            IMAGE_SIZE.Thumbnail
+            IMAGE_SIZE.Thumbnail,
         ]),
         imageWidth: PropTypes.number,
-        loadingBackgroundColor: PropTypes.string,
+        onCaptureRef: PropTypes.func,
+        theme: PropTypes.object,
         resizeMode: PropTypes.string,
         resizeMethod: PropTypes.string,
-        wrapperBackgroundColor: PropTypes.string,
         wrapperHeight: PropTypes.number,
-        wrapperWidth: PropTypes.number
+        wrapperWidth: PropTypes.number,
+        isSingleImage: PropTypes.bool,
+        imageDimensions: PropTypes.object,
     };
 
     static defaultProps = {
-        fadeInOnLoad: false,
-        imageHeight: 100,
-        imageSize: IMAGE_SIZE.Preview,
-        imageWidth: 100,
-        loading: false,
-        loadingBackgroundColor: '#fff',
         resizeMode: 'cover',
         resizeMethod: 'resize',
-        wrapperBackgroundColor: '#fff',
-        wrapperHeigh: 100,
-        wrapperWidth: 100
     };
 
-    state = {
-        opacity: new Animated.Value(0),
-        requesting: true,
-        retry: 0
+    constructor(props) {
+        super(props);
+
+        const {file} = props;
+        if (file && file.id && !file.localPath) {
+            const headers = Client4.getOptions({}).headers;
+
+            const preloadImages = [
+                {uri: Client4.getFileThumbnailUrl(file.id), headers},
+                {uri: Client4.getFileUrl(file.id), headers},
+            ];
+
+            if (isGif(file)) {
+                preloadImages.push({uri: Client4.getFilePreviewUrl(file.id), headers});
+            }
+
+            FastImage.preload(preloadImages);
+        }
+
+        this.state = {
+            failed: false,
+        };
+    }
+
+    boxPlaceholder = () => {
+        if (this.props.isSingleImage) {
+            return null;
+        }
+        return (<View style={style.boxPlaceholder}/>);
     };
 
-    // Sometimes the request after a file upload errors out.
-    // We'll up to three times to get the image.
-    // We have to add a timestamp so fetch will retry the call.
-    handleLoadError = () => {
-        if (this.state.retry < 4) {
-            setTimeout(() => {
-                this.setState({
-                    retry: (this.state.retry + 1),
-                    timestamp: Date.now()
-                });
-            }, 300);
+    handleCaptureRef = (ref) => {
+        const {onCaptureRef} = this.props;
+
+        if (onCaptureRef) {
+            onCaptureRef(ref);
         }
     };
 
-    handleLoad = () => {
-        this.setState({
-            requesting: false
-        });
+    handleError = () => {
+        this.setState({failed: true});
+    }
 
-        Animated.timing(this.state.opacity, {
-            toValue: 1,
-            duration: 300
-        }).start(() => {
-            this.props.addFileToFetchCache(this.handleGetImageURL());
-        });
+    imageProps = (file) => {
+        const imageProps = {};
+        const {failed} = this.state;
+
+        if (failed) {
+            imageProps.defaultSource = brokenImageIcon;
+        } else if (file.localPath) {
+            imageProps.defaultSource = {uri: file.localPath};
+        } else if (file.id) {
+            imageProps.thumbnailUri = Client4.getFileThumbnailUrl(file.id);
+            imageProps.imageUri = isGif(file) ? Client4.getFilePreviewUrl(file.id) : Client4.getFileUrl(file.id);
+        }
+        return imageProps;
     };
 
-    handleLoadStart = () => {
-        this.setState({
-            requesting: true
-        });
-    };
+    renderSmallImage = () => {
+        const {file, isSingleImage, resizeMethod, theme} = this.props;
 
-    handleGetImageURL = () => {
-        const {file, imageSize} = this.props;
+        let wrapperStyle = style.fileImageWrapper;
 
-        if (file.localPath && this.state.retry === 0) {
-            return file.localPath;
+        if (isSingleImage) {
+            wrapperStyle = style.singleSmallImageWrapper;
+
+            if (file.width > SMALL_IMAGE_MAX_WIDTH) {
+                wrapperStyle = [wrapperStyle, {width: '100%'}];
+            }
         }
 
-        switch (imageSize) {
-        case IMAGE_SIZE.Fullsize:
-            return Client4.getFileUrl(file.id, this.state.timestamp);
-        case IMAGE_SIZE.Preview:
-            return Client4.getFilePreviewUrl(file.id, this.state.timestamp);
-        case IMAGE_SIZE.Thumbnail:
-        default:
-            return Client4.getFileThumbnailUrl(file.id, this.state.timestamp);
-        }
-    };
-
-    calculateNeededWidth = (height, width, newHeight) => {
-        const ratio = width / height;
-
-        let newWidth = newHeight * ratio;
-        if (newWidth < newHeight) {
-            newWidth = newHeight;
-        }
-
-        return newWidth;
+        return (
+            <View
+                ref={this.handleCaptureRef}
+                style={[
+                    wrapperStyle,
+                    style.smallImageBorder,
+                    {borderColor: changeOpacity(theme.centerChannelColor, 0.4)},
+                ]}
+            >
+                {this.boxPlaceholder()}
+                <View style={style.smallImageOverlay}>
+                    <ProgressiveImage
+                        style={{height: file.height, width: file.width}}
+                        tintDefaultSource={!file.localPath && !this.state.failed}
+                        filename={file.name}
+                        onError={this.handleError}
+                        resizeMode={'contain'}
+                        resizeMethod={resizeMethod}
+                        {...this.imageProps(file)}
+                    />
+                </View>
+            </View>
+        );
     };
 
     render() {
         const {
-            fetchCache,
             file,
-            imageHeight,
-            imageWidth,
-            imageSize,
-            loadingBackgroundColor,
+            imageDimensions,
             resizeMethod,
             resizeMode,
-            wrapperBackgroundColor,
-            wrapperHeight,
-            wrapperWidth
         } = this.props;
 
-        let source = {};
-
-        if (this.state.retry === 4) {
-            source = imageIcon;
-        } else if (file.id) {
-            source = {uri: this.handleGetImageURL()};
-        } else if (file.failed) {
-            source = {uri: file.localPath};
+        if (file.height <= SMALL_IMAGE_MAX_HEIGHT || file.width <= SMALL_IMAGE_MAX_WIDTH) {
+            return this.renderSmallImage();
         }
 
-        const isInFetchCache = fetchCache[source.uri];
-
-        const imageComponentLoaders = {
-            onError: isInFetchCache ? null : this.handleLoadError,
-            onLoadStart: isInFetchCache ? null : this.handleLoadStart,
-            onLoad: isInFetchCache ? null : this.handleLoad
-        };
-        const opacity = isInFetchCache ? 1 : this.state.opacity;
-
-        let height = imageHeight;
-        let width = imageWidth;
-        let imageStyle = {height, width};
-        if (imageSize === IMAGE_SIZE.Preview) {
-            height = 100;
-            width = this.calculateNeededWidth(file.height, file.width, height);
-            imageStyle = {height, width, position: 'absolute', top: 0, left: 0};
-        }
+        const imageProps = this.imageProps(file);
 
         return (
-            <View style={[style.fileImageWrapper, {backgroundColor: wrapperBackgroundColor, height: wrapperHeight, width: wrapperWidth, overflow: 'hidden'}]}>
-                <AnimatedView style={{height: imageHeight, width: imageWidth, backgroundColor: wrapperBackgroundColor, opacity}}>
-                    <Image
-                        style={imageStyle}
-                        source={source}
-                        resizeMode={resizeMode}
-                        resizeMethod={resizeMethod}
-                        {...imageComponentLoaders}
-                    />
-                </AnimatedView>
-                {(!isInFetchCache && !file.failed && (file.loading || this.state.requesting)) &&
-                <View style={[style.loaderContainer, {backgroundColor: loadingBackgroundColor}]}>
-                    <ActivityIndicator size='small'/>
-                </View>
-                }
+            <View
+                ref={this.handleCaptureRef}
+                style={style.fileImageWrapper}
+            >
+                {this.boxPlaceholder()}
+                <ProgressiveImage
+                    style={[this.props.isSingleImage ? null : style.imagePreview, imageDimensions]}
+                    tintDefaultSource={!file.localPath && !this.state.failed}
+                    filename={file.name}
+                    onError={this.handleError}
+                    resizeMode={resizeMode}
+                    resizeMethod={resizeMethod}
+                    {...imageProps}
+                />
             </View>
         );
     }
 }
 
 const style = StyleSheet.create({
-    fileImageWrapper: {
-        alignItems: 'center',
-        justifyContent: 'center'
+    imagePreview: {
+        ...StyleSheet.absoluteFill,
     },
-    loaderContainer: {
-        position: 'absolute',
-        height: '100%',
-        width: '100%',
+    fileImageWrapper: {
+        borderRadius: 5,
+        overflow: 'hidden',
+    },
+    boxPlaceholder: {
+        paddingBottom: '100%',
+    },
+    smallImageBorder: {
+        borderWidth: 1,
+        borderRadius: 5,
+    },
+    smallImageOverlay: {
+        ...StyleSheet.absoluteFill,
+        justifyContent: 'center',
         alignItems: 'center',
-        justifyContent: 'center'
-    }
+        borderRadius: 4,
+    },
+    singleSmallImageWrapper: {
+        height: SMALL_IMAGE_MAX_HEIGHT,
+        width: SMALL_IMAGE_MAX_WIDTH,
+        overflow: 'hidden',
+    },
 });

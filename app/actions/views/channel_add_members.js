@@ -1,12 +1,12 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
-import {addChannelMember} from 'mattermost-redux/actions/channels';
+import {addChannelMember} from '@mm-redux/actions/channels';
 
 export function handleAddChannelMembers(channelId, members) {
-    return async (dispatch, getState) => {
+    return async (dispatch) => {
         try {
-            const requests = members.map((m) => dispatch(addChannelMember(channelId, m, getState)));
+            const requests = members.map((m) => dispatch(addChannelMember(channelId, m)));
 
             return await Promise.all(requests);
         } catch (error) {

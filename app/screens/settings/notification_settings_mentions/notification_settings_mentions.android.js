@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React from 'react';
 import {
@@ -7,7 +7,7 @@ import {
     ScrollView,
     Text,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import {injectIntl} from 'react-intl';
 
@@ -16,27 +16,36 @@ import RadioButtonGroup from 'app/components/radio_button';
 import StatusBar from 'app/components/status_bar';
 import TextInputWithLocalizedPlaceholder from 'app/components/text_input_with_localized_placeholder';
 import SectionItem from 'app/screens/settings/section_item';
-import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
+import {
+    changeOpacity,
+    makeStyleSheetFromTheme,
+    getKeyboardAppearanceFromTheme,
+} from 'app/utils/theme';
+import {t} from 'app/utils/i18n';
 
 import NotificationSettingsMentionsBase from './notification_settings_mention_base';
 
-class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
+class NotificationSettingsMentionsAndroid extends NotificationSettingsMentionsBase {
     cancelMentionKeys = () => {
-        this.setState({showKeywordsModal: false});
-        this.keywords = this.state.mention_keys;
+        this.setState({
+            androidKeywords: this.state.mention_keys,
+            showKeywordsModal: false,
+        });
     };
 
     cancelReplyNotification = () => {
-        this.setState({showReplyModal: false});
-        this.replyValue = this.state.comments;
+        this.setState({
+            newReplyValue: this.state.comments,
+            showReplyModal: false,
+        });
     };
 
-    onKeywordsChangeText = (value) => {
-        this.keywords = value;
+    onKeywordsChangeText = (androidKeywords) => {
+        this.setState({androidKeywords});
     };
 
     onReplyChanged = (value) => {
-        this.replyValue = value;
+        this.setState({newReplyValue: value});
     };
 
     renderKeywordsModal(style) {
@@ -54,16 +63,17 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
                         <View style={style.modalBody}>
                             <View style={style.modalTitleContainer}>
                                 <FormattedText
-                                    id='user.settings.notifications.email.send'
-                                    defaultMessage='Send email notifications'
+                                    id='mobile.notification_settings_mentions.keywords'
+                                    defaultMessage='Keywords'
                                     style={style.modalTitle}
                                 />
                             </View>
                             <TextInputWithLocalizedPlaceholder
                                 autoFocus={true}
-                                defaultValue={this.keywords}
-                                blurOnSubmit={false}
+                                value={this.state.androidKeywords}
+                                blurOnSubmit={true}
                                 onChangeText={this.onKeywordsChangeText}
+                                onSubmitEditing={this.saveMentionKeys}
                                 multiline={false}
                                 style={style.input}
                                 autoCapitalize='none'
@@ -71,7 +81,9 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
                                 placeholder={{id: 'mobile.notification_settings_mentions.keywordsDescription', defaultMessage: 'Other words that trigger a mention'}}
                                 placeholderTextColor={changeOpacity(theme.centerChannelColor, 0.4)}
                                 returnKeyType='done'
+                                returnKeyLabel={this.props.intl.formatMessage({id: 'mobile.notification_settings.modal_save'})}
                                 underlineColorAndroid={theme.linkColor}
+                                keyboardAppearance={getKeyboardAppearanceFromTheme(theme)}
                             />
                             <FormattedText
                                 id='mobile.notification_settings_mentions.keywordsHelp'
@@ -113,28 +125,29 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
 
     renderReplyModal(style) {
         const {intl} = this.props;
+        const {newReplyValue} = this.state;
 
         const options = [{
             label: intl.formatMessage({
                 id: 'mobile.account_notifications.threads_start_participate',
-                defaultMessage: 'Threads that I start or participate in'
+                defaultMessage: 'Threads that I start or participate in',
             }),
             value: 'any',
-            checked: this.state.comments === 'any'
+            checked: newReplyValue === 'any',
         }, {
             label: intl.formatMessage({
                 id: 'mobile.account_notifications.threads_start',
-                defaultMessage: 'Threads that I start'
+                defaultMessage: 'Threads that I start',
             }),
             value: 'root',
-            checked: this.state.comments === 'root'
+            checked: newReplyValue === 'root',
         }, {
             label: intl.formatMessage({
                 id: 'mobile.account_notifications.threads_mentions',
-                defaultMessage: 'Mentions in threads'
+                defaultMessage: 'Mentions in threads',
             }),
             value: 'never',
-            checked: this.state.comments === 'never'
+            checked: newReplyValue === 'never',
         }];
 
         return (
@@ -201,16 +214,16 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
         let i18nMessage;
         switch (this.state.comments) {
         case 'root':
-            i18nId = 'mobile.account_notifications.threads_start';
+            i18nId = t('mobile.account_notifications.threads_start');
             i18nMessage = 'Threads that I start';
             break;
         case 'never':
-            i18nId = 'mobile.account_notifications.threads_mentions';
+            i18nId = t('mobile.account_notifications.threads_mentions');
             i18nMessage = 'Mentions in threads';
             break;
         case 'any':
         default:
-            i18nId = 'mobile.account_notifications.threads_start_participate';
+            i18nId = t('mobile.account_notifications.threads_start_participate');
             i18nMessage = 'Threads that I start or participate in';
             break;
         }
@@ -237,13 +250,12 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
     }
 
     saveMentionKeys = () => {
-        this.setState({showKeywordsModal: false});
-        this.updateMentionKeys(this.keywords);
+        this.updateMentionKeys(this.state.androidKeywords);
     };
 
     saveReplyNotification = () => {
         this.setState({showReplyModal: false});
-        this.setReplyNotifications(this.replyValue);
+        this.setReplyNotifications(this.state.newReplyValue);
     };
 
     showKeywordsModal = () => {
@@ -277,7 +289,7 @@ class NotificationSettingsMentionsIos extends NotificationSettingsMentionsBase {
                     style={style.scrollView}
                     contentContainerStyle={style.scrollViewContent}
                 >
-                    {currentUser.first_name.length > 0 &&
+                    {currentUser.first_name?.length > 0 &&
                     <View>
                         <SectionItem
                             label={(
@@ -362,84 +374,83 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
             flex: 1,
-            backgroundColor: theme.centerChannelBg
         },
         input: {
             color: theme.centerChannelColor,
             fontSize: 12,
-            height: 40
+            height: 40,
         },
         separator: {
             backgroundColor: changeOpacity(theme.centerChannelColor, 0.1),
             height: 1,
-            width: '100%'
+            width: '100%',
         },
         scrollView: {
             flex: 1,
-            backgroundColor: changeOpacity(theme.centerChannelColor, 0.06)
+            backgroundColor: changeOpacity(theme.centerChannelColor, 0.06),
         },
         scrollViewContent: {
-            paddingVertical: 0
+            paddingVertical: 0,
         },
         modalOverlay: {
             backgroundColor: changeOpacity('#000000', 0.6),
             alignItems: 'center',
-            flex: 1
+            flex: 1,
         },
         modal: {
             backgroundColor: theme.centerChannelBg,
             borderRadius: 4,
             marginTop: 20,
-            width: '95%'
+            width: '95%',
         },
         modalBody: {
-            paddingHorizontal: 24
+            paddingHorizontal: 24,
         },
         modalTitleContainer: {
             marginBottom: 30,
-            marginTop: 20
+            marginTop: 20,
         },
         modalTitle: {
             color: theme.centerChannelColor,
-            fontSize: 19
+            fontSize: 19,
         },
         modalOptionDisabled: {
             color: changeOpacity(theme.centerChannelColor, 0.5),
-            fontSize: 17
+            fontSize: 17,
         },
         modalInput: {
             color: theme.centerChannelColor,
-            fontSize: 19
+            fontSize: 19,
         },
         modalHelpText: {
             color: changeOpacity(theme.centerChannelColor, 0.5),
             fontSize: 13,
-            marginTop: 20
+            marginTop: 20,
         },
         modalFooter: {
             alignItems: 'flex-end',
             height: 58,
             marginTop: 40,
-            width: '100%'
+            width: '100%',
         },
         modalFooterContainer: {
             alignItems: 'center',
             flex: 1,
             flexDirection: 'row',
-            paddingRight: 24
+            paddingRight: 24,
         },
         modalFooterOptionContainer: {
             alignItems: 'center',
             height: 40,
             justifyContent: 'center',
             paddingHorizontal: 10,
-            paddingVertical: 5
+            paddingVertical: 5,
         },
         modalFooterOption: {
             color: theme.linkColor,
-            fontSize: 14
-        }
+            fontSize: 14,
+        },
     };
 });
 
-export default injectIntl(NotificationSettingsMentionsIos);
+export default injectIntl(NotificationSettingsMentionsAndroid);

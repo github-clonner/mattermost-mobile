@@ -1,15 +1,15 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {connect} from 'react-redux';
 
-import {getChannel} from 'mattermost-redux/selectors/entities/channels';
+import {getChannel} from '@mm-redux/selectors/entities/channels';
 
 import ChannelButton from './channel_button';
 
 function mapStateToProps(state, ownProps) {
     return {
-        channel: getChannel(state, ownProps.channelId)
+        channel: getChannel(state, ownProps.channelId),
     };
 }
 

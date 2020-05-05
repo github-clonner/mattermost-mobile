@@ -1,19 +1,21 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React from 'react';
 import PropTypes from 'prop-types';
 import {intlShape} from 'react-intl';
 import {
     Text,
-    View
+    View,
 } from 'react-native';
-import ProfilePicture from 'app/components/profile_picture';
-import {makeStyleSheetFromTheme, changeOpacity} from 'app/utils/theme';
+
+import {displayUsername} from '@mm-redux/utils/user_utils';
 
 import CustomListRow from 'app/components/custom_list/custom_list_row';
-
-import {displayUsername} from 'mattermost-redux/utils/user_utils';
+import ProfilePicture from 'app/components/profile_picture';
+import {BotTag, GuestTag} from 'app/components/tag';
+import {makeStyleSheetFromTheme, changeOpacity} from 'app/utils/theme';
+import {isGuest} from 'app/utils/users';
 
 export default class UserListRow extends React.PureComponent {
     static propTypes = {
@@ -22,16 +24,16 @@ export default class UserListRow extends React.PureComponent {
         theme: PropTypes.object.isRequired,
         user: PropTypes.object.isRequired,
         teammateNameDisplay: PropTypes.string.isRequired,
-        ...CustomListRow.propTypes
+        ...CustomListRow.propTypes,
     };
 
     static contextTypes = {
-        intl: intlShape
+        intl: intlShape,
     };
 
     onPress = () => {
         if (this.props.onPress) {
-            this.props.onPress(this.props.id);
+            this.props.onPress(this.props.id, this.props.item);
         }
     };
 
@@ -44,50 +46,83 @@ export default class UserListRow extends React.PureComponent {
             selected,
             teammateNameDisplay,
             theme,
-            user
+            user,
+            isLandscape,
         } = this.props;
 
         const {id, username} = user;
         const style = getStyleFromTheme(theme);
 
-        let usernameDisplay = `(@${username})`;
+        let usernameDisplay = `@${username}`;
         if (isMyUser) {
             usernameDisplay = formatMessage({
                 id: 'mobile.more_dms.you',
-                defaultMessage: '(@{username} - you)'
+                defaultMessage: '@{username} - you',
             }, {username});
         }
 
+        const teammateDisplay = displayUsername(user, teammateNameDisplay);
+        const showTeammateDisplay = teammateDisplay !== username;
+
         return (
-            <CustomListRow
-                id={id}
-                theme={theme}
-                onPress={this.onPress}
-                enabled={enabled}
-                selectable={selectable}
-                selected={selected}
-            >
-                <ProfilePicture
-                    userId={id}
-                    size={32}
-                />
-                <View style={style.textContainer}>
-                    <View>
-                        <Text style={style.displayName}>
-                            {displayUsername(user, teammateNameDisplay)}
-                        </Text>
+            <View style={style.container}>
+                <CustomListRow
+                    id={id}
+                    onPress={this.onPress}
+                    enabled={enabled}
+                    selectable={selectable}
+                    selected={selected}
+                    isLandscape={isLandscape}
+                >
+                    <View style={style.profileContainer}>
+                        <ProfilePicture
+                            userId={id}
+                            size={32}
+                        />
                     </View>
-                    <View>
-                        <Text
-                            style={style.username}
-                            ellipsizeMode='tail'
-                            numberOfLines={1}
-                        >
-                            {usernameDisplay}
-                        </Text>
+                    <View style={style.textContainer}>
+                        <View>
+                            <View style={style.indicatorContainer}>
+                                <Text
+                                    style={style.username}
+                                    ellipsizeMode='tail'
+                                    numberOfLines={1}
+                                >
+                                    {usernameDisplay}
+                                </Text>
+                                <BotTag
+                                    show={Boolean(user.is_bot)}
+                                    theme={theme}
+                                />
+                                <GuestTag
+                                    show={isGuest(user)}
+                                    theme={theme}
+                                />
+                            </View>
+                        </View>
+                        {showTeammateDisplay &&
+                        <View>
+                            <Text
+                                style={style.displayName}
+                                ellipsizeMode='tail'
+                                numberOfLines={1}
+                            >
+                                {teammateDisplay}
+                            </Text>
+                        </View>
+                        }
+                        {user.delete_at > 0 &&
+                        <View>
+                            <Text
+                                style={style.deactivated}
+                            >
+                                {formatMessage({id: 'mobile.user_list.deactivated', defaultMessage: 'Deactivated'})}
+                            </Text>
+                        </View>
+                        }
                     </View>
-                </View>
-            </CustomListRow>
+                </CustomListRow>
+            </View>
         );
     }
 }
@@ -95,50 +130,37 @@ export default class UserListRow extends React.PureComponent {
 const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
+            flex: 1,
             flexDirection: 'row',
-            height: 65,
-            paddingHorizontal: 15,
+            marginHorizontal: 10,
+            overflow: 'hidden',
+        },
+        profileContainer: {
+            flexDirection: 'row',
             alignItems: 'center',
-            backgroundColor: theme.centerChannelBg
+            color: theme.centerChannelColor,
+        },
+        textContainer: {
+            marginLeft: 10,
+            justifyContent: 'center',
+            flexDirection: 'column',
+            flex: 1,
         },
         displayName: {
             fontSize: 15,
-            color: theme.centerChannelColor
-        },
-        icon: {
-            fontSize: 20,
-            color: theme.centerChannelColor
-        },
-        textContainer: {
-            flexDirection: 'row',
-            marginLeft: 5
+            color: changeOpacity(theme.centerChannelColor, 0.5),
         },
         username: {
-            marginLeft: 5,
             fontSize: 15,
-            color: changeOpacity(theme.centerChannelColor, 0.5)
+            color: theme.centerChannelColor,
         },
-        selector: {
-            height: 28,
-            width: 28,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: '#888',
-            alignItems: 'center',
-            justifyContent: 'center'
+        indicatorContainer: {
+            flexDirection: 'row',
         },
-        selectorContainer: {
-            height: 50,
-            paddingRight: 15,
-            alignItems: 'center',
-            justifyContent: 'center'
+        deactivated: {
+            marginTop: 2,
+            fontSize: 12,
+            color: changeOpacity(theme.centerChannelColor, 0.5),
         },
-        selectorDisabled: {
-            backgroundColor: '#888'
-        },
-        selectorFilled: {
-            backgroundColor: '#378FD2',
-            borderWidth: 0
-        }
     };
 });

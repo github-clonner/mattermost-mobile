@@ -1,15 +1,22 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React from 'react';
 import {injectIntl} from 'react-intl';
 import {
+    Alert,
     Modal,
+    Platform,
     ScrollView,
     Text,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
+
+import deepEqual from 'deep-equal';
+import PropTypes from 'prop-types';
+
+import {RequestStatus} from '@mm-redux/constants';
 
 import FormattedText from 'app/components/formatted_text';
 import RadioButtonGroup from 'app/components/radio_button';
@@ -18,35 +25,52 @@ import PushNotifications from 'app/push_notifications';
 import StatusBar from 'app/components/status_bar';
 import SectionItem from 'app/screens/settings/section_item';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
+import {getNotificationProps} from 'app/utils/notify_props';
 
 import NotificationSettingsMobileBase from './notification_settings_mobile_base';
 
 class NotificationSettingsMobileAndroid extends NotificationSettingsMobileBase {
+    static propTypes = {
+        ...NotificationSettingsMobileBase.propTypes,
+        updateMeRequest: PropTypes.object.isRequired,
+    }
+
+    static defaultProps = {
+        currentUser: {},
+    }
+
     cancelMobilePushModal = () => {
-        this.setState({showMobilePushModal: false});
-        this.push = this.state.push;
+        this.setState({
+            newPush: this.state.push,
+            showMobilePushModal: false,
+        });
     };
 
     cancelMobilePushStatusModal = () => {
-        this.setState({showMobilePushStatusModal: false});
-        this.pushStatus = this.state.push_status;
+        this.setState({
+            newPushStatus: this.state.push_status,
+            showMobilePushStatusModal: false,
+        });
     };
 
     cancelMobileSoundsModal = () => {
-        this.setState({showMobileSoundsModal: false});
-        this.sound = this.state.selectedUri;
+        this.setState({
+            newSound: this.state.selectedUri,
+            showMobileSoundsModal: false,
+        });
     };
 
     onMobilePushChanged = (value) => {
-        this.push = value;
+        this.setState({newPush: value});
     };
 
     onMobilePushStatusChanged = (value) => {
-        this.pushStatus = value;
+        this.setState({newPushStatus: value});
     };
 
     onMobileSoundChanged = (value) => {
-        this.sound = value;
+        this.setState({newSound: value});
+
         if (value && value !== 'none') {
             NotificationPreferences.play(value);
         }
@@ -83,28 +107,29 @@ class NotificationSettingsMobileAndroid extends NotificationSettingsMobileBase {
     renderMobilePushModal(style) {
         const {config, intl} = this.props;
         const pushNotificationsEnabled = config.SendPushNotifications === 'true';
+        const {newPush} = this.state;
 
         const options = [{
             label: intl.formatMessage({
                 id: 'user.settings.notifications.allActivity',
-                defaultMessage: 'For all activity'
+                defaultMessage: 'For all activity',
             }),
             value: 'all',
-            checked: this.state.push === 'all'
+            checked: newPush === 'all',
         }, {
             label: intl.formatMessage({
                 id: 'user.settings.notifications.onlyMentions',
-                defaultMessage: 'Only for mentions and direct messages'
+                defaultMessage: 'Only for mentions and direct messages',
             }),
             value: 'mention',
-            checked: this.state.push === 'mention'
+            checked: newPush === 'mention',
         }, {
             label: intl.formatMessage({
                 id: 'user.settings.notifications.never',
-                defaultMessage: 'Never'
+                defaultMessage: 'Never',
             }),
             value: 'none',
-            checked: this.state.push === 'none'
+            checked: newPush === 'none',
         }];
 
         return (
@@ -177,28 +202,29 @@ class NotificationSettingsMobileAndroid extends NotificationSettingsMobileBase {
 
     renderMobilePushStatusModal(style) {
         const {intl} = this.props;
+        const {newPushStatus} = this.state;
 
         const options = [{
             label: intl.formatMessage({
                 id: 'user.settings.push_notification.online',
-                defaultMessage: 'Online, away or offline'
+                defaultMessage: 'Online, away or offline',
             }),
             value: 'online',
-            checked: this.state.push_status === 'online'
+            checked: newPushStatus === 'online',
         }, {
             label: intl.formatMessage({
                 id: 'user.settings.push_notification.away',
-                defaultMessage: 'Away or offline'
+                defaultMessage: 'Away or offline',
             }),
             value: 'away',
-            checked: this.state.push_status === 'away'
+            checked: newPushStatus === 'away',
         }, {
             label: intl.formatMessage({
                 id: 'user.settings.push_notification.offline',
-                defaultMessage: 'Offline'
+                defaultMessage: 'Offline',
             }),
             value: 'offline',
-            checked: this.state.push_status === 'offline'
+            checked: newPushStatus === 'offline',
         }];
 
         return (
@@ -257,23 +283,23 @@ class NotificationSettingsMobileAndroid extends NotificationSettingsMobileBase {
     }
 
     renderMobileSoundsModal(style) {
-        const {defaultSound, selectedUri} = this.state;
+        const {defaultSound, newSound} = this.state;
         const {intl, notificationPreferences} = this.props;
         const {defaultUri, sounds} = notificationPreferences;
         const soundsArray = [{
             label: intl.formatMessage({
                 id: 'mobile.notification_settings_mobile.default_sound',
-                defaultMessage: 'Default ({sound})'
+                defaultMessage: 'Default ({sound})',
             }, {sound: defaultSound}),
             value: defaultUri,
-            checked: selectedUri === null
+            checked: newSound === null,
         }, {
             label: intl.formatMessage({
                 id: 'mobile.notification_settings_mobile.no_sound',
-                defaultMessage: 'None'
+                defaultMessage: 'None',
             }),
             value: 'none',
-            checked: selectedUri === 'none'
+            checked: newSound === 'none',
         }];
 
         if (sounds && sounds.length) {
@@ -281,7 +307,7 @@ class NotificationSettingsMobileAndroid extends NotificationSettingsMobileBase {
                 return {
                     label: s.name,
                     value: s.uri,
-                    checked: s.uri === selectedUri
+                    checked: s.uri === newSound,
                 };
             });
             soundsArray.push(...filteredSounds);
@@ -342,6 +368,22 @@ class NotificationSettingsMobileAndroid extends NotificationSettingsMobileBase {
                 </View>
             </Modal>
         );
+    }
+
+    componentDidUpdate(prevProps) {
+        const {updateMeRequest, intl} = this.props;
+        if (updateMeRequest !== prevProps.updateMeRequest && updateMeRequest.status === RequestStatus.FAILURE) {
+            Alert.alert(
+                intl.formatMessage({
+                    id: 'mobile.notification_settings.save_failed_title',
+                    defaultMessage: 'Connection issue',
+                }),
+                intl.formatMessage({
+                    id: 'mobile.notification_settings.save_failed_description',
+                    defaultMessage: 'The notification settings failed to save due to a connection issue, please try again.',
+                }),
+            );
+        }
     }
 
     renderMobilePushSection() {
@@ -478,7 +520,7 @@ class NotificationSettingsMobileAndroid extends NotificationSettingsMobileBase {
                     id='mobile.notification_settings_mobile.default_sound'
                     defaultMessage='Default ({sound})'
                     values={{
-                        sound: defaultSound
+                        sound: defaultSound,
                     }}
                 />
             );
@@ -557,33 +599,84 @@ class NotificationSettingsMobileAndroid extends NotificationSettingsMobileBase {
         );
     }
 
+    renderNotificationOptions(style) {
+        if (Platform.Version >= 26) {
+            return null;
+        }
+
+        return (
+            <React.Fragment>
+                {this.renderMobileSoundSection(style)}
+                {this.renderMobileVibrateSection(style)}
+                {this.renderMobileBlinkSection(style)}
+            </React.Fragment>
+        );
+    }
+
     saveMobilePushModal = () => {
         this.setState({showMobilePushModal: false});
-        this.setMobilePush(this.push);
+        this.setMobilePush(this.state.newPush, this.saveNotificationProps);
     };
 
     saveMobilePushStatusModal = () => {
         this.setState({showMobilePushStatusModal: false});
-        this.setMobilePushStatus(this.pushStatus);
+        this.setMobilePushStatus(this.state.newPushStatus, this.saveNotificationProps);
+    };
+
+    saveNotificationProps = () => {
+        const {
+            channel,
+            comments,
+            desktop,
+            email,
+            first_name: firstName,
+            mention_keys: mentionKeys,
+            push,
+            push_status: pushStatus,
+        } = this.state;
+
+        const {currentUser} = this.props;
+
+        const notifyProps = {
+            channel,
+            comments,
+            desktop,
+            email,
+            first_name: firstName,
+            mention_keys: mentionKeys,
+            push,
+            push_status: pushStatus,
+            user_id: currentUser.id,
+        };
+
+        const {user_id: userId} = notifyProps;
+        const previousProps = {
+            ...getNotificationProps(currentUser),
+            user_id: userId,
+        };
+
+        if (!deepEqual(previousProps, notifyProps)) {
+            this.props.actions.updateMe({notify_props: notifyProps});
+        }
     };
 
     saveMobileSoundsModal = () => {
-        const {defaultSound} = this.state;
+        const {defaultSound, newSound} = this.state;
         const {intl, notificationPreferences} = this.props;
         const {defaultUri, sounds} = notificationPreferences;
 
         let sound;
         let selectedUri = null;
-        if (this.sound === defaultUri) {
+        if (newSound === defaultUri) {
             sound = defaultSound;
-        } else if (this.sound === 'none') {
-            selectedUri = this.sound;
+        } else if (newSound === 'none') {
+            selectedUri = 'none';
             sound = intl.formatMessage({
                 id: 'mobile.notification_settings_mobile.no_sound',
-                defaultMessage: 'None'
+                defaultMessage: 'None',
             });
         } else {
-            selectedUri = this.sound;
+            selectedUri = newSound;
             const selected = sounds.find((s) => s.uri === selectedUri);
             sound = selected ? selected.name : 'none';
         }
@@ -598,12 +691,12 @@ class NotificationSettingsMobileAndroid extends NotificationSettingsMobileBase {
         PushNotifications.localNotification({
             message: intl.formatMessage({
                 id: 'mobile.notification_settings_mobile.test_push',
-                defaultMessage: 'This is a test push notification'
+                defaultMessage: 'This is a test push notification',
             }),
             userInfo: {
                 localNotification: true,
-                localTest: true
-            }
+                localTest: true,
+            },
         });
     };
 
@@ -644,9 +737,7 @@ class NotificationSettingsMobileAndroid extends NotificationSettingsMobileBase {
                     {this.renderMobilePushSection()}
                     <View style={style.separator}/>
                     {this.renderMobilePushStatusSection(style)}
-                    {this.renderMobileSoundSection(style)}
-                    {this.renderMobileVibrateSection(style)}
-                    {this.renderMobileBlinkSection(style)}
+                    {this.renderNotificationOptions(style)}
                     {this.renderMobileTestSection(style)}
                 </ScrollView>
                 {this.renderMobilePushModal(style)}
@@ -661,75 +752,74 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
             flex: 1,
-            backgroundColor: theme.centerChannelBg
         },
         input: {
             color: theme.centerChannelColor,
             fontSize: 12,
-            height: 40
+            height: 40,
         },
         separator: {
             backgroundColor: changeOpacity(theme.centerChannelColor, 0.1),
             height: 1,
-            width: '100%'
+            width: '100%',
         },
         scrollView: {
             flex: 1,
-            backgroundColor: changeOpacity(theme.centerChannelColor, 0.06)
+            backgroundColor: changeOpacity(theme.centerChannelColor, 0.06),
         },
         scrollViewContent: {
-            paddingVertical: 0
+            paddingVertical: 0,
         },
         modalOverlay: {
             backgroundColor: changeOpacity('#000000', 0.6),
             alignItems: 'center',
-            flex: 1
+            flex: 1,
         },
         modal: {
             backgroundColor: theme.centerChannelBg,
             borderRadius: 4,
             marginTop: 20,
-            width: '95%'
+            width: '95%',
         },
         modalBody: {
             maxHeight: '80%',
-            paddingHorizontal: 24
+            paddingHorizontal: 24,
         },
         modalTitleContainer: {
             marginBottom: 30,
-            marginTop: 20
+            marginTop: 20,
         },
         modalTitle: {
             color: theme.centerChannelColor,
-            fontSize: 19
+            fontSize: 19,
         },
         modalOptionDisabled: {
             color: changeOpacity(theme.centerChannelColor, 0.5),
-            fontSize: 17
+            fontSize: 17,
         },
         modalFooter: {
             alignItems: 'flex-end',
             height: 58,
             marginTop: 40,
-            width: '100%'
+            width: '100%',
         },
         modalFooterContainer: {
             alignItems: 'center',
             flex: 1,
             flexDirection: 'row',
-            paddingRight: 24
+            paddingRight: 24,
         },
         modalFooterOptionContainer: {
             alignItems: 'center',
             height: 40,
             justifyContent: 'center',
             paddingHorizontal: 10,
-            paddingVertical: 5
+            paddingVertical: 5,
         },
         modalFooterOption: {
             color: theme.linkColor,
-            fontSize: 14
-        }
+            fontSize: 14,
+        },
     };
 });
 

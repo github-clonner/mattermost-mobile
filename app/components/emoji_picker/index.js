@@ -1,81 +1,81 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {connect} from 'react-redux';
 import {createSelector} from 'reselect';
 import {bindActionCreators} from 'redux';
 
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
-import {getCustomEmojisByName} from 'mattermost-redux/selectors/entities/emojis';
-import {getConfig} from 'mattermost-redux/selectors/entities/general';
-import {getCustomEmojis, searchCustomEmojis} from 'mattermost-redux/actions/emojis';
-import {Client4} from 'mattermost-redux/client';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {getCustomEmojisByName} from '@mm-redux/selectors/entities/emojis';
+import {getConfig} from '@mm-redux/selectors/entities/general';
+import {getCustomEmojis, searchCustomEmojis} from '@mm-redux/actions/emojis';
 
 import {incrementEmojiPickerPage} from 'app/actions/views/emoji';
 import {getDimensions, isLandscape} from 'app/selectors/device';
-import {CategoryNames, Emojis, EmojiIndicesByAlias, EmojiIndicesByCategory} from 'app/utils/emojis';
+import {BuiltInEmojis, CategoryNames, Emojis, EmojiIndicesByAlias, EmojiIndicesByCategory} from 'app/utils/emojis';
+import {t} from 'app/utils/i18n';
 
 import EmojiPicker from './emoji_picker';
 import Fuse from 'fuse.js';
 
 const categoryToI18n = {
     activity: {
-        id: 'mobile.emoji_picker.activity',
+        id: t('mobile.emoji_picker.activity'),
         defaultMessage: 'ACTIVITY',
-        icon: 'futbol-o'
+        icon: 'futbol-o',
     },
     custom: {
-        id: 'mobile.emoji_picker.custom',
+        id: t('mobile.emoji_picker.custom'),
         defaultMessage: 'CUSTOM',
-        icon: 'at'
+        icon: 'at',
     },
     flags: {
-        id: 'mobile.emoji_picker.flags',
+        id: t('mobile.emoji_picker.flags'),
         defaultMessage: 'FLAGS',
-        icon: 'flag-o'
+        icon: 'flag-o',
     },
     foods: {
-        id: 'mobile.emoji_picker.foods',
+        id: t('mobile.emoji_picker.foods'),
         defaultMessage: 'FOODS',
-        icon: 'cutlery'
+        icon: 'cutlery',
     },
     nature: {
-        id: 'mobile.emoji_picker.nature',
+        id: t('mobile.emoji_picker.nature'),
         defaultMessage: 'NATURE',
-        icon: 'leaf'
+        icon: 'leaf',
     },
     objects: {
-        id: 'mobile.emoji_picker.objects',
+        id: t('mobile.emoji_picker.objects'),
         defaultMessage: 'OBJECTS',
-        icon: 'lightbulb-o'
+        icon: 'lightbulb-o',
     },
     people: {
-        id: 'mobile.emoji_picker.people',
+        id: t('mobile.emoji_picker.people'),
         defaultMessage: 'PEOPLE',
-        icon: 'smile-o'
+        icon: 'smile-o',
     },
     places: {
-        id: 'mobile.emoji_picker.places',
+        id: t('mobile.emoji_picker.places'),
         defaultMessage: 'PLACES',
-        icon: 'plane'
+        icon: 'plane',
     },
     recent: {
-        id: 'mobile.emoji_picker.recent',
+        id: t('mobile.emoji_picker.recent'),
         defaultMessage: 'RECENTLY USED',
-        icon: 'clock-o'
+        icon: 'clock-o',
     },
     symbols: {
-        id: 'mobile.emoji_picker.symbols',
+        id: t('mobile.emoji_picker.symbols'),
         defaultMessage: 'SYMBOLS',
-        icon: 'heart-o'
-    }
+        icon: 'heart-o',
+    },
 };
 
 function fillEmoji(indice) {
     const emoji = Emojis[indice];
     return {
         name: emoji.aliases[0],
-        aliases: emoji.aliases
+        aliases: emoji.aliases,
     };
 }
 
@@ -89,24 +89,29 @@ const getEmojisBySection = createSelector(
             const section = {
                 ...categoryToI18n[category],
                 key: category,
-                data: items
+                data: items,
             };
 
             return section;
         });
 
         const customEmojiItems = [];
+        BuiltInEmojis.forEach((emoji) => {
+            customEmojiItems.push({
+                name: emoji,
+            });
+        });
 
         for (const [key] of customEmojis) {
             customEmojiItems.push({
-                name: key
+                name: key,
             });
         }
 
         emoticons.push({
             ...categoryToI18n.custom,
             key: 'custom',
-            data: customEmojiItems
+            data: customEmojiItems,
         });
 
         if (recentEmojis.length) {
@@ -115,12 +120,12 @@ const getEmojisBySection = createSelector(
             emoticons.unshift({
                 ...categoryToI18n.recent,
                 key: 'recent',
-                data: items
+                data: items,
             });
         }
 
         return emoticons;
-    }
+    },
 );
 
 const getEmojisByName = createSelector(
@@ -132,7 +137,7 @@ const getEmojisByName = createSelector(
         }
 
         return Array.from(emoticons);
-    }
+    },
 );
 
 function mapStateToProps(state) {
@@ -145,7 +150,7 @@ function mapStateToProps(state) {
         location: 0,
         distance: 100,
         minMatchCharLength: 2,
-        maxPatternLength: 32
+        maxPatternLength: 32,
     };
 
     const list = emojis.length ? emojis : [];
@@ -160,7 +165,6 @@ function mapStateToProps(state) {
         theme: getTheme(state),
         customEmojisEnabled: getConfig(state).EnableCustomEmoji === 'true',
         customEmojiPage: state.views.emoji.emojiPickerCustomPage,
-        serverVersion: state.entities.general.serverVersion || Client4.getServerVersion()
     };
 }
 
@@ -169,8 +173,8 @@ function mapDispatchToProps(dispatch) {
         actions: bindActionCreators({
             getCustomEmojis,
             incrementEmojiPickerPage,
-            searchCustomEmojis
-        }, dispatch)
+            searchCustomEmojis,
+        }, dispatch),
     };
 }
 

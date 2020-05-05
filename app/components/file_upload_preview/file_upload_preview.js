@@ -1,212 +1,228 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
-    Platform,
+    InteractionManager,
     ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View
+    Text,
+    View,
+    Platform,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/Ionicons';
+import * as Animatable from 'react-native-animatable';
+
+import EventEmitter from '@mm-redux/utils/event_emitter';
 
 import FormattedText from 'app/components/formatted_text';
-import FileAttachmentImage from 'app/components/file_attachment_list/file_attachment_image';
-import FileAttachmentIcon from 'app/components/file_attachment_list/file_attachment_icon';
+import {makeStyleSheetFromTheme} from 'app/utils/theme';
+
+import FileUploadItem from './file_upload_item';
+
+const showFiles = {opacity: 1, height: 68};
+const hideFiles = {opacity: 0, height: 0};
+const hideError = {height: 0};
 
 export default class FileUploadPreview extends PureComponent {
     static propTypes = {
-        actions: PropTypes.shape({
-            addFileToFetchCache: PropTypes.func.isRequired,
-            handleRemoveFile: PropTypes.func.isRequired,
-            retryFileUpload: PropTypes.func.isRequired
-        }).isRequired,
         channelId: PropTypes.string.isRequired,
         channelIsLoading: PropTypes.bool,
-        createPostRequestStatus: PropTypes.string.isRequired,
-        deviceHeight: PropTypes.number.isRequired,
-        fetchCache: PropTypes.object.isRequired,
         files: PropTypes.array.isRequired,
-        inputHeight: PropTypes.number.isRequired,
+        filesUploadingForCurrentChannel: PropTypes.bool.isRequired,
         rootId: PropTypes.string,
         theme: PropTypes.object.isRequired,
-        filesUploadingForCurrentChannel: PropTypes.bool.isRequired,
-        showFileMaxWarning: PropTypes.bool.isRequired
     };
 
-    handleRetryFileUpload = (file) => {
-        if (!file.failed) {
-            return;
+    static defaultProps = {
+        files: [],
+    };
+
+    state = {
+        fileSizeWarning: null,
+        showFileMaxWarning: false,
+    };
+
+    errorRef = React.createRef();
+    errorContainerRef = React.createRef();
+    containerRef = React.createRef();
+
+    componentDidMount() {
+        EventEmitter.on('fileMaxWarning', this.handleFileMaxWarning);
+        EventEmitter.on('fileSizeWarning', this.handleFileSizeWarning);
+
+        if (this.props.files.length) {
+            InteractionManager.runAfterInteractions(this.showOrHideContainer);
         }
+    }
 
-        this.props.actions.retryFileUpload(file, this.props.rootId);
-    };
+    componentWillUnmount() {
+        EventEmitter.off('fileMaxWarning', this.handleFileMaxWarning);
+        EventEmitter.off('fileSizeWarning', this.handleFileSizeWarning);
+    }
+
+    componentDidUpdate(prevProps) {
+        if (this.containerRef.current && this.props.files.length !== prevProps.files.length) {
+            InteractionManager.runAfterInteractions(this.showOrHideContainer);
+        }
+    }
 
     buildFilePreviews = () => {
         return this.props.files.map((file) => {
-            let filePreviewComponent;
-            if (file.loading | (file.has_preview_image || file.mime_type === 'image/gif')) {
-                filePreviewComponent = (
-                    <FileAttachmentImage
-                        addFileToFetchCache={this.props.actions.addFileToFetchCache}
-                        fetchCache={this.props.fetchCache}
-                        file={file}
-                    />
-                );
-            } else {
-                filePreviewComponent = (
-                    <FileAttachmentIcon
-                        file={file}
-                        theme={this.props.theme}
-                    />
-                );
-            }
             return (
-                <View
+                <FileUploadItem
                     key={file.clientId}
-                    style={style.preview}
-                >
-                    <View style={style.previewShadow}>
-                        {filePreviewComponent}
-                        {file.failed &&
-                        <TouchableOpacity
-                            style={style.failed}
-                            onPress={() => this.handleRetryFileUpload(file)}
-                        >
-                            <Icon
-                                name='md-refresh'
-                                size={50}
-                                color='#fff'
-                            />
-                        </TouchableOpacity>
-                        }
-                    </View>
-                    <TouchableOpacity
-                        style={style.removeButtonWrapper}
-                        onPress={() => this.props.actions.handleRemoveFile(file.clientId, this.props.channelId, this.props.rootId)}
-                    >
-                        <Icon
-                            name='md-close'
-                            color='#fff'
-                            size={18}
-                            style={style.removeButtonIcon}
-                        />
-                    </TouchableOpacity>
-                </View>
+                    channelId={this.props.channelId}
+                    file={file}
+                    rootId={this.props.rootId}
+                    theme={this.props.theme}
+                />
             );
         });
     };
 
-    render() {
+    clearErrorsFromState = (delay) => {
+        setTimeout(() => {
+            this.setState({
+                showFileMaxWarning: false,
+                fileSizeWarning: null,
+            });
+        }, delay || 0);
+    }
+
+    handleFileMaxWarning = () => {
+        this.setState({showFileMaxWarning: true});
+        if (this.errorRef.current) {
+            this.makeErrorVisible(true, 20);
+            setTimeout(() => {
+                this.makeErrorVisible(false, 20);
+            }, 5000);
+        }
+    };
+
+    handleFileSizeWarning = (message) => {
+        if (this.errorRef.current) {
+            if (message) {
+                this.setState({fileSizeWarning: message.replace(': ', ':\n')});
+                this.makeErrorVisible(true, 40);
+            } else {
+                this.makeErrorVisible(false, 20);
+            }
+        }
+    };
+
+    makeErrorVisible = (visible, height) => {
+        if (this.errorContainerRef.current) {
+            if (visible) {
+                this.errorContainerRef.current.transition(hideError, {height}, 200, 'ease-out');
+            } else {
+                this.errorContainerRef.current.transition({height}, hideError, 200, 'ease-in');
+            }
+        }
+    }
+
+    showOrHideContainer = () => {
         const {
-            showFileMaxWarning,
             channelIsLoading,
             filesUploadingForCurrentChannel,
-            deviceHeight,
-            files
+            files,
         } = this.props;
-        if (channelIsLoading || (!files.length && !filesUploadingForCurrentChannel)) {
-            return null;
+
+        if ((channelIsLoading || (!files.length && !filesUploadingForCurrentChannel))) {
+            this.containerRef.current.transition(showFiles, hideFiles, 150, 'ease-out');
+            this.shown = false;
+        } else if (files.length && !this.shown) {
+            this.containerRef.current.transition(hideFiles, showFiles, 350, 'ease-in');
+            this.shown = true;
         }
+    }
+
+    render() {
+        const {fileSizeWarning, showFileMaxWarning} = this.state;
+        const {theme, files} = this.props;
+        const style = getStyleSheet(theme);
+        const fileContainerStyle = {
+            paddingBottom: files.length ? 5 : 0,
+        };
 
         return (
-            <View>
-                <View style={[style.container, {height: deviceHeight}]}>
+            <View style={style.previewContainer}>
+                <Animatable.View
+                    style={[style.fileContainer, fileContainerStyle]}
+                    ref={this.containerRef}
+                    isInteraction={true}
+                >
                     <ScrollView
                         horizontal={true}
                         style={style.scrollView}
                         contentContainerStyle={style.scrollViewContent}
+                        keyboardShouldPersistTaps={'handled'}
                     >
                         {this.buildFilePreviews()}
                     </ScrollView>
-                    {showFileMaxWarning && (
-                        <FormattedText
-                            style={style.warning}
-                            id='mobile.file_upload.max_warning'
-                            defaultMessage='Uploads limited to 5 files maximum.'
-                        />
-                    )}
-
-                </View>
+                </Animatable.View>
+                <Animatable.View
+                    ref={this.errorContainerRef}
+                    style={style.errorContainer}
+                    isInteraction={true}
+                >
+                    <Animatable.View
+                        ref={this.errorRef}
+                        isInteraction={true}
+                        style={style.errorTextContainer}
+                        useNativeDriver={true}
+                    >
+                        {showFileMaxWarning && (
+                            <FormattedText
+                                style={style.warning}
+                                id='mobile.file_upload.max_warning'
+                                defaultMessage='Uploads limited to 5 files maximum.'
+                            />
+                        )}
+                        {Boolean(fileSizeWarning) &&
+                            <Text style={style.warning}>
+                                {fileSizeWarning}
+                            </Text>
+                        }
+                    </Animatable.View>
+                </Animatable.View>
             </View>
         );
     }
 }
 
-const style = StyleSheet.create({
-    container: {
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        left: 0,
-        bottom: 0,
-        position: 'absolute',
-        width: '100%'
-    },
-    failed: {
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        position: 'absolute',
-        height: '100%',
-        width: '100%',
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
-    preview: {
-        justifyContent: 'flex-end',
-        height: 115,
-        width: 115
-    },
-    previewShadow: {
-        height: 100,
-        width: 100,
-        elevation: 10,
-        ...Platform.select({
-            ios: {
-                backgroundColor: '#fff',
-                shadowColor: '#000',
-                shadowOpacity: 0.5,
-                shadowRadius: 4,
-                shadowOffset: {
-                    width: 0,
-                    height: 0
-                }
-            }
-        })
-    },
-    removeButtonIcon: Platform.select({
-        ios: {
-            marginTop: 2
+const getStyleSheet = makeStyleSheetFromTheme((theme) => {
+    return {
+        previewContainer: {
+            display: 'flex',
+            flexDirection: 'column',
         },
-        android: {
-            marginLeft: 1
-        }
-    }),
-    removeButtonWrapper: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'absolute',
-        overflow: 'hidden',
-        elevation: 11,
-        top: 7,
-        right: 7,
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        backgroundColor: '#000',
-        borderWidth: 1,
-        borderColor: '#fff'
-    },
-    scrollView: {
-        flex: 1,
-        marginBottom: 12
-    },
-    scrollViewContent: {
-        alignItems: 'flex-end',
-        marginLeft: 14
-    },
-    warning: {
-        color: 'white',
-        marginLeft: 14,
-        marginBottom: 12
-    }
+        fileContainer: {
+            display: 'flex',
+            flexDirection: 'row',
+            height: 0,
+        },
+        errorContainer: {
+            height: 0,
+        },
+        errorTextContainer: {
+            marginTop: Platform.select({
+                ios: 4,
+                android: 2,
+            }),
+            marginHorizontal: 12,
+            flex: 1,
+        },
+        scrollView: {
+            flex: 1,
+        },
+        scrollViewContent: {
+            alignItems: 'flex-end',
+            paddingRight: 12,
+        },
+        warning: {
+            color: theme.errorTextColor,
+            flex: 1,
+            flexWrap: 'wrap',
+        },
+    };
 });

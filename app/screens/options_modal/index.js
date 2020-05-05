@@ -1,15 +1,16 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {connect} from 'react-redux';
 
-import {getDimensions} from 'app/selectors/device';
+import {getDimensions, isLandscape} from 'app/selectors/device';
 
 import OptionsModal from './options_modal';
 
 function mapStateToProps(state) {
     return {
-        ...getDimensions(state)
+        ...getDimensions(state),
+        isLandscape: isLandscape(state),
     };
 }
 

@@ -1,15 +1,22 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {connect} from 'react-redux';
 
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
+import {getAutolinkedUrlSchemes, getConfig} from '@mm-redux/selectors/entities/general';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {getCurrentUserMentionKeys} from '@mm-redux/selectors/entities/users';
 
 import Markdown from './markdown';
 
 function mapStateToProps(state) {
+    const {MinimumHashtagLength} = getConfig(state);
+
     return {
-        theme: getTheme(state)
+        autolinkedUrlSchemes: getAutolinkedUrlSchemes(state),
+        mentionKeys: getCurrentUserMentionKeys(state),
+        minimumHashtagLength: MinimumHashtagLength ? parseInt(MinimumHashtagLength, 10) : 3,
+        theme: getTheme(state),
     };
 }
 

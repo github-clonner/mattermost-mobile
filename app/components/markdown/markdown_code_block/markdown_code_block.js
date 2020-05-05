@@ -1,99 +1,100 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {PropTypes} from 'prop-types';
 import React from 'react';
-import {injectIntl, intlShape} from 'react-intl';
+import {intlShape} from 'react-intl';
 import {
     Clipboard,
+    Keyboard,
     StyleSheet,
     Text,
-    TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 
 import CustomPropTypes from 'app/constants/custom_prop_types';
 import FormattedText from 'app/components/formatted_text';
+import TouchableWithFeedback from 'app/components/touchable_with_feedback';
+import BottomSheet from 'app/utils/bottom_sheet';
 import {getDisplayNameForLanguage} from 'app/utils/markdown';
-import {wrapWithPreventDoubleTap} from 'app/utils/tap';
+import {preventDoubleTap} from 'app/utils/tap';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
 import mattermostManaged from 'app/mattermost_managed';
+import {goToScreen} from 'app/actions/navigation';
 
 const MAX_LINES = 4;
 
-class MarkdownCodeBlock extends React.PureComponent {
+export default class MarkdownCodeBlock extends React.PureComponent {
     static propTypes = {
-        intl: intlShape.isRequired,
-        navigator: PropTypes.object.isRequired,
         theme: PropTypes.object.isRequired,
         language: PropTypes.string,
         content: PropTypes.string.isRequired,
         textStyle: CustomPropTypes.Style,
-        onLongPress: PropTypes.func.isRequired
     };
 
     static defaultProps = {
-        language: ''
+        language: '',
     };
 
-    handlePress = wrapWithPreventDoubleTap(() => {
-        const {intl, navigator, theme} = this.props;
+    static contextTypes = {
+        intl: intlShape,
+    };
 
-        const languageDisplayName = getDisplayNameForLanguage(this.props.language);
+    handlePress = preventDoubleTap(() => {
+        const {language, content} = this.props;
+        const {intl} = this.context;
+        const screen = 'Code';
+        const passProps = {
+            content,
+        };
+
+        const languageDisplayName = getDisplayNameForLanguage(language);
         let title;
         if (languageDisplayName) {
             title = intl.formatMessage(
                 {
                     id: 'mobile.routes.code',
-                    defaultMessage: '{language} Code'
+                    defaultMessage: '{language} Code',
                 },
                 {
-                    language: languageDisplayName
-                }
+                    language: languageDisplayName,
+                },
             );
         } else {
             title = intl.formatMessage({
                 id: 'mobile.routes.code.noLanguage',
-                defaultMessage: 'Code'
+                defaultMessage: 'Code',
             });
         }
 
-        navigator.push({
-            screen: 'Code',
-            title,
-            animated: true,
-            backButtonTitle: '',
-            passProps: {
-                content: this.props.content
-            },
-            navigatorStyle: {
-                navBarTextColor: theme.sidebarHeaderTextColor,
-                navBarBackgroundColor: theme.sidebarHeaderBg,
-                navBarButtonColor: theme.sidebarHeaderTextColor,
-                screenBackgroundColor: theme.centerChannelBg
-            }
+        Keyboard.dismiss();
+        requestAnimationFrame(() => {
+            goToScreen(screen, title, passProps);
         });
     });
 
     handleLongPress = async () => {
-        const {formatMessage} = this.props.intl;
+        const {formatMessage} = this.context.intl;
 
-        const config = await mattermostManaged.getLocalConfig();
+        const config = mattermostManaged.getCachedConfig();
 
-        let action;
-        if (config.copyAndPasteProtection !== 'true') {
-            action = {
-                text: formatMessage({id: 'mobile.markdown.code.copy_code', defaultMessage: 'Copy Code'}),
-                onPress: this.handleCopyCode
-            };
+        if (config?.copyAndPasteProtection !== 'true') {
+            const cancelText = formatMessage({id: 'mobile.post.cancel', defaultMessage: 'Cancel'});
+            const actionText = formatMessage({id: 'mobile.markdown.code.copy_code', defaultMessage: 'Copy Code'});
+            BottomSheet.showBottomSheetWithOptions({
+                options: [actionText, cancelText],
+                cancelButtonIndex: 1,
+            }, (value) => {
+                if (value !== 1) {
+                    this.handleCopyCode();
+                }
+            });
         }
-
-        this.props.onLongPress(action);
-    }
+    };
 
     handleCopyCode = () => {
         Clipboard.setString(this.props.content);
-    }
+    };
 
     trimContent = (content) => {
         const lines = content.split('\n');
@@ -102,13 +103,13 @@ class MarkdownCodeBlock extends React.PureComponent {
         if (numberOfLines > MAX_LINES) {
             return {
                 content: lines.slice(0, MAX_LINES).join('\n'),
-                numberOfLines
+                numberOfLines,
             };
         }
 
         return {
             content,
-            numberOfLines
+            numberOfLines,
         };
     };
 
@@ -147,16 +148,17 @@ class MarkdownCodeBlock extends React.PureComponent {
                     id='mobile.markdown.code.plusMoreLines'
                     defaultMessage='+{count, number} more {count, plural, one {line} other {lines}}'
                     values={{
-                        count: numberOfLines - MAX_LINES
+                        count: numberOfLines - MAX_LINES,
                     }}
                 />
             );
         }
 
         return (
-            <TouchableOpacity
+            <TouchableWithFeedback
                 onPress={this.handlePress}
                 onLongPress={this.handleLongPress}
+                type={'opacity'}
             >
                 <View style={style.container}>
                     <View style={style.lineNumbers}>
@@ -174,7 +176,7 @@ class MarkdownCodeBlock extends React.PureComponent {
                     </View>
                     {language}
                 </View>
-            </TouchableOpacity>
+            </TouchableWithFeedback>
         );
     }
 }
@@ -185,7 +187,7 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
             borderColor: changeOpacity(theme.centerChannelColor, 0.15),
             borderRadius: 3,
             borderWidth: StyleSheet.hairlineWidth,
-            flexDirection: 'row'
+            flexDirection: 'row',
         },
         lineNumbers: {
             alignItems: 'center',
@@ -195,32 +197,32 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
             flexDirection: 'column',
             justifyContent: 'flex-start',
             paddingVertical: 4,
-            width: 21
+            width: 21,
         },
         lineNumbersText: {
             color: changeOpacity(theme.centerChannelColor, 0.5),
             fontSize: 12,
-            lineHeight: 18
+            lineHeight: 18,
         },
         rightColumn: {
             flexDirection: 'column',
             flex: 1,
             paddingHorizontal: 6,
-            paddingVertical: 4
+            paddingVertical: 4,
         },
         code: {
             flexDirection: 'row',
-            overflow: 'scroll' // Doesn't actually cause a scrollbar, but stops text from wrapping
+            overflow: 'scroll', // Doesn't actually cause a scrollbar, but stops text from wrapping
         },
         codeText: {
             color: changeOpacity(theme.centerChannelColor, 0.65),
             fontSize: 12,
-            lineHeight: 18
+            lineHeight: 18,
         },
         plusMoreLinesText: {
             color: changeOpacity(theme.centerChannelColor, 0.4),
             fontSize: 11,
-            marginTop: 2
+            marginTop: 2,
         },
         language: {
             alignItems: 'center',
@@ -230,13 +232,11 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
             padding: 6,
             position: 'absolute',
             right: 0,
-            top: 0
+            top: 0,
         },
         languageText: {
             color: theme.sidebarHeaderTextColor,
-            fontSize: 12
-        }
+            fontSize: 12,
+        },
     };
 });
-
-export default injectIntl(MarkdownCodeBlock);

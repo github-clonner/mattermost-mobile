@@ -1,14 +1,14 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
 
-import {selectPost} from 'mattermost-redux/actions/posts';
-import {getMyCurrentChannelMembership, makeGetChannel} from 'mattermost-redux/selectors/entities/channels';
-import {makeGetPostIdsForThread} from 'mattermost-redux/selectors/entities/posts';
+import {selectPost} from '@mm-redux/actions/posts';
+import {makeGetChannel, getMyCurrentChannelMembership} from '@mm-redux/selectors/entities/channels';
+import {makeGetPostIdsForThread} from '@mm-redux/selectors/entities/posts';
 
 import Thread from './thread';
 
@@ -21,12 +21,14 @@ function makeMapStateToProps() {
 
         return {
             channelId: ownProps.channelId,
-            channelType: channel.type,
-            displayName: channel.display_name,
+            channelType: channel ? channel.type : '',
+            displayName: channel ? channel.display_name : '',
             myMember: getMyCurrentChannelMembership(state),
             rootId: ownProps.rootId,
             postIds: getPostIdsForThread(state, ownProps.rootId),
-            theme: getTheme(state)
+            theme: getTheme(state),
+            channelIsArchived: channel ? channel.delete_at !== 0 : false,
+            threadLoadingStatus: state.requests.posts.getPostThread,
         };
     };
 }
@@ -34,8 +36,8 @@ function makeMapStateToProps() {
 function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
-            selectPost
-        }, dispatch)
+            selectPost,
+        }, dispatch),
     };
 }
 

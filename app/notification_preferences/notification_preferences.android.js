@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {NativeModules, PermissionsAndroid} from 'react-native';
 
@@ -8,7 +8,7 @@ const {NotificationPreferences} = NativeModules;
 const defaultPreferences = {
     sounds: [],
     shouldBlink: false,
-    shouldVibrate: true
+    shouldVibrate: true,
 };
 
 export default {
@@ -18,7 +18,7 @@ export default {
             let granted;
             if (!hasPermission) {
                 granted = await PermissionsAndroid.request(
-                    PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE
+                    PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
                 );
             }
 
@@ -34,5 +34,5 @@ export default {
     setNotificationSound: NotificationPreferences.setNotificationSound,
     setShouldVibrate: NotificationPreferences.setShouldVibrate,
     setShouldBlink: NotificationPreferences.setShouldBlink,
-    play: NotificationPreferences.previewSound
+    play: NotificationPreferences.previewSound,
 };

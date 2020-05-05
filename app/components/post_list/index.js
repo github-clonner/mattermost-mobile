@@ -1,13 +1,16 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
-import {refreshChannelWithRetry} from 'app/actions/views/channel';
-import {makePreparePostIdsForPostList, START_OF_NEW_MESSAGES} from 'app/selectors/post_list';
+import {selectFocusedPostId} from '@mm-redux/actions/posts';
+import {getConfig, getCurrentUrl} from '@mm-redux/selectors/entities/general';
+import {getTheme} from '@mm-redux/selectors/entities/preferences';
+import {makePreparePostIdsForPostList, START_OF_NEW_MESSAGES} from '@mm-redux/utils/post_list';
 
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
+import {handleSelectChannelByName, loadChannelsByTeamName, refreshChannelWithRetry} from 'app/actions/views/channel';
+import {setDeepLinkURL} from 'app/actions/views/root';
 
 import PostList from './post_list';
 
@@ -15,15 +18,18 @@ function makeMapStateToProps() {
     const preparePostIds = makePreparePostIdsForPostList();
     return (state, ownProps) => {
         const postIds = preparePostIds(state, ownProps);
-        const measureCellLayout = postIds.indexOf(START_OF_NEW_MESSAGES) > -1 || Boolean(ownProps.highlightPostId);
-
-        const {deviceHeight} = state.device.dimension;
+        let initialIndex = postIds.indexOf(START_OF_NEW_MESSAGES);
+        if (ownProps.highlightPostId) {
+            initialIndex = postIds.indexOf(ownProps.highlightPostId);
+        }
 
         return {
-            deviceHeight,
-            measureCellLayout,
+            deepLinkURL: state.views.root.deepLinkURL,
             postIds,
-            theme: getTheme(state)
+            initialIndex,
+            serverURL: getCurrentUrl(state),
+            siteURL: getConfig(state).SiteURL,
+            theme: getTheme(state),
         };
     };
 }
@@ -31,8 +37,12 @@ function makeMapStateToProps() {
 function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
-            refreshChannelWithRetry
-        }, dispatch)
+            handleSelectChannelByName,
+            loadChannelsByTeamName,
+            refreshChannelWithRetry,
+            selectFocusedPostId,
+            setDeepLinkURL,
+        }, dispatch),
     };
 }
 

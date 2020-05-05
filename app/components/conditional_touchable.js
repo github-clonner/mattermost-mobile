@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import PropTypes from 'prop-types';
 import React from 'react';
@@ -10,7 +10,7 @@ import CustomPropTypes from 'app/constants/custom_prop_types';
 export default class ConditionalTouchable extends React.PureComponent {
     static propTypes = {
         touchable: PropTypes.bool,
-        children: CustomPropTypes.Children.isRequired
+        children: CustomPropTypes.Children.isRequired,
     };
 
     render() {

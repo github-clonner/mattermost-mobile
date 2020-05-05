@@ -1,14 +1,15 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
+    Platform,
     Text,
-    TouchableOpacity
 } from 'react-native';
 
 import Emoji from 'app/components/emoji';
+import TouchableWithFeedback from 'app/components/touchable_with_feedback';
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
 
 export default class Reaction extends PureComponent {
@@ -17,7 +18,8 @@ export default class Reaction extends PureComponent {
         emojiName: PropTypes.string.isRequired,
         highlight: PropTypes.bool.isRequired,
         onPress: PropTypes.func.isRequired,
-        theme: PropTypes.object.isRequired
+        onLongPress: PropTypes.func.isRequired,
+        theme: PropTypes.object.isRequired,
     }
 
     handlePress = () => {
@@ -26,21 +28,32 @@ export default class Reaction extends PureComponent {
     }
 
     render() {
-        const {count, emojiName, highlight, theme} = this.props;
+        const {
+            count,
+            emojiName,
+            highlight,
+            onLongPress,
+            theme,
+        } = this.props;
         const styles = getStyleSheet(theme);
 
         return (
-            <TouchableOpacity
+            <TouchableWithFeedback
                 onPress={this.handlePress}
+                onLongPress={onLongPress}
+                delayLongPress={350}
                 style={[styles.reaction, (highlight && styles.highlight)]}
+                type={'opacity'}
             >
                 <Emoji
                     emojiName={emojiName}
-                    size={15}
+                    size={20}
+                    textStyle={{color: 'black', fontWeight: 'bold'}}
+                    customEmojiStyle={{marginHorizontal: 3}}
                     padding={5}
                 />
                 <Text style={styles.count}>{count}</Text>
-            </TouchableOpacity>
+            </TouchableWithFeedback>
         );
     }
 }
@@ -49,10 +62,10 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
         count: {
             color: theme.linkColor,
-            marginLeft: 6
+            marginLeft: 6,
         },
         highlight: {
-            backgroundColor: changeOpacity(theme.linkColor, 0.1)
+            backgroundColor: changeOpacity(theme.linkColor, 0.1),
         },
         reaction: {
             alignItems: 'center',
@@ -60,10 +73,16 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
             borderColor: changeOpacity(theme.linkColor, 0.4),
             borderWidth: 1,
             flexDirection: 'row',
+            height: 30,
             marginRight: 6,
-            marginVertical: 5,
-            paddingVertical: 2,
-            paddingHorizontal: 6
-        }
+            marginBottom: 5,
+            marginTop: 10,
+            paddingHorizontal: 6,
+            ...Platform.select({
+                android: {
+                    paddingBottom: 2,
+                },
+            }),
+        },
     };
 });

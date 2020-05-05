@@ -1,76 +1,79 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {intlShape} from 'react-intl';
 import {
     Keyboard,
-    InteractionManager
+    InteractionManager,
 } from 'react-native';
-
-import {General, RequestStatus} from 'mattermost-redux/constants';
-import EventEmitter from 'mattermost-redux/utils/event_emitter';
+import {Navigation} from 'react-native-navigation';
+import SafeAreaView from 'app/components/safe_area_view';
+import {General, RequestStatus} from '@mm-redux/constants';
+import EventEmitter from '@mm-redux/utils/event_emitter';
 
 import EditChannelInfo from 'app/components/edit_channel_info';
-import {ViewTypes} from 'app/constants';
-import {setNavigatorStyles} from 'app/utils/theme';
+import {NavigationTypes, ViewTypes} from 'app/constants';
 import {cleanUpUrlable} from 'app/utils/url';
+import {t} from 'app/utils/i18n';
+import {popTopScreen, setButtons} from 'app/actions/navigation';
 
 const messages = {
     display_name_required: {
-        id: 'mobile.rename_channel.display_name_required',
-        defaultMessage: 'Channel name is required'
+        id: t('mobile.rename_channel.display_name_required'),
+        defaultMessage: 'Channel name is required',
     },
     display_name_maxLength: {
-        id: 'mobile.rename_channel.display_name_maxLength',
-        defaultMessage: 'Channel name must be less than {maxLength, number} characters'
+        id: t('mobile.rename_channel.display_name_maxLength'),
+        defaultMessage: 'Channel name must be less than {maxLength, number} characters',
     },
     display_name_minLength: {
-        id: 'mobile.rename_channel.display_name_minLength',
-        defaultMessage: 'Channel name must be {minLength, number} or more characters'
+        id: t('mobile.rename_channel.display_name_minLength'),
+        defaultMessage: 'Channel name must be {minLength, number} or more characters',
     },
     name_required: {
-        id: 'mobile.rename_channel.name_required',
-        defaultMessage: 'URL is required'
+        id: t('mobile.rename_channel.name_required'),
+        defaultMessage: 'URL is required',
     },
     name_maxLength: {
-        id: 'mobile.rename_channel.name_maxLength',
-        defaultMessage: 'URL must be less than {maxLength, number} characters'
+        id: t('mobile.rename_channel.name_maxLength'),
+        defaultMessage: 'URL must be less than {maxLength, number} characters',
     },
     name_minLength: {
-        id: 'mobile.rename_channel.name_minLength',
-        defaultMessage: 'URL must be {minLength, number} or more characters'
+        id: t('mobile.rename_channel.name_minLength'),
+        defaultMessage: 'URL must be {minLength, number} or more characters',
     },
     name_lowercase: {
-        id: 'mobile.rename_channel.name_lowercase',
-        defaultMessage: 'URL be lowercase alphanumeric characters'
-    }
+        id: t('mobile.rename_channel.name_lowercase'),
+        defaultMessage: 'URL be lowercase alphanumeric characters',
+    },
 };
 
 export default class EditChannel extends PureComponent {
     static propTypes = {
-        navigator: PropTypes.object.isRequired,
+        actions: PropTypes.shape({
+            patchChannel: PropTypes.func.isRequired,
+            getChannel: PropTypes.func.isRequired,
+            setChannelDisplayName: PropTypes.func.isRequired,
+        }),
+        componentId: PropTypes.string,
         theme: PropTypes.object.isRequired,
         deviceWidth: PropTypes.number.isRequired,
         deviceHeight: PropTypes.number.isRequired,
         channel: PropTypes.object.isRequired,
         currentTeamUrl: PropTypes.string.isRequired,
         updateChannelRequest: PropTypes.object.isRequired,
-        closeButton: PropTypes.object,
-        actions: PropTypes.shape({
-            patchChannel: PropTypes.func.isRequired
-        })
     };
 
     static contextTypes = {
-        intl: intlShape
+        intl: intlShape,
     };
 
     rightButton = {
         id: 'edit-channel',
-        disabled: true,
-        showAsAction: 'always'
+        enabled: false,
+        showAsAction: 'always',
     };
 
     constructor(props, context) {
@@ -80,80 +83,119 @@ export default class EditChannel extends PureComponent {
                 display_name: displayName,
                 header,
                 purpose,
-                name: channelURL
-            }
+                name: channelURL,
+            },
         } = props;
 
         this.state = {
             error: null,
             updating: false,
+            updateChannelRequest: props.updateChannelRequest,
             displayName,
             channelURL,
             purpose,
-            header
+            header,
         };
 
-        this.rightButton.title = context.intl.formatMessage({id: 'mobile.edit_channel', defaultMessage: 'Save'});
+        this.rightButton.color = props.theme.sidebarHeaderTextColor;
+        this.rightButton.text = context.intl.formatMessage({id: 'mobile.edit_channel', defaultMessage: 'Save'});
 
         const buttons = {
-            rightButtons: [this.rightButton]
+            rightButtons: [this.rightButton],
         };
 
-        props.navigator.setOnNavigatorEvent(this.onNavigatorEvent);
-        props.navigator.setButtons(buttons);
+        setButtons(props.componentId, buttons);
     }
 
     componentDidMount() {
+        this.navigationEventListener = Navigation.events().bindComponent(this);
+
         this.emitCanUpdateChannel(false);
     }
 
-    componentWillReceiveProps(nextProps) {
-        if (this.props.theme !== nextProps.theme) {
-            setNavigatorStyles(this.props.navigator, nextProps.theme);
-        }
-
+    static getDerivedStateFromProps(nextProps, state) {
         const {updateChannelRequest} = nextProps;
 
-        if (this.props.updateChannelRequest !== updateChannelRequest) {
+        if (state.updateChannelRequest !== updateChannelRequest) {
+            const newState = {
+                error: null,
+                updating: true,
+                updateChannelRequest,
+            };
+
             switch (updateChannelRequest.status) {
+            case RequestStatus.SUCCESS:
+                newState.updating = false;
+                break;
+            case RequestStatus.FAILURE:
+                newState.error = updateChannelRequest.error;
+                newState.updating = false;
+                break;
+            }
+
+            return newState;
+        }
+        return null;
+    }
+
+    componentDidUpdate(prevProps) {
+        if (prevProps.updateChannelRequest !== this.props.updateChannelRequest) {
+            switch (this.props.updateChannelRequest.status) {
             case RequestStatus.STARTED:
                 this.emitUpdating(true);
-                this.setState({error: null, updating: true});
                 break;
             case RequestStatus.SUCCESS:
-                EventEmitter.emit('close_channel_drawer');
+                EventEmitter.emit(NavigationTypes.CLOSE_MAIN_SIDEBAR);
                 InteractionManager.runAfterInteractions(() => {
                     this.emitUpdating(false);
-                    this.setState({error: null, updating: false});
                     this.close();
                 });
                 break;
             case RequestStatus.FAILURE:
                 this.emitUpdating(false);
-                this.setState({error: updateChannelRequest.error, updating: false});
                 break;
             }
         }
     }
 
+    navigationButtonPressed({buttonId}) {
+        switch (buttonId) {
+        case 'close-edit-channel':
+            this.close();
+            break;
+        case 'edit-channel':
+            this.onUpdateChannel();
+            break;
+        }
+    }
+
     close = () => {
-        this.props.navigator.pop({animated: true});
+        const {channel: {type}} = this.props;
+        const isDirect = type === General.DM_CHANNEL || type === General.GM_CHANNEL;
+
+        if (!isDirect) {
+            this.props.actions.setChannelDisplayName(this.state.displayName);
+        }
+
+        popTopScreen();
     };
 
     emitCanUpdateChannel = (enabled) => {
+        const {componentId} = this.props;
         const buttons = {
-            rightButtons: [{...this.rightButton, disabled: !enabled}]
+            rightButtons: [{...this.rightButton, enabled}],
         };
 
-        this.props.navigator.setButtons(buttons);
+        setButtons(componentId, buttons);
     };
 
     emitUpdating = (loading) => {
+        const {componentId} = this.props;
         const buttons = {
-            rightButtons: [{...this.rightButton, disabled: loading}]
+            rightButtons: [{...this.rightButton, enabled: !loading}],
         };
 
-        this.props.navigator.setButtons(buttons);
+        setButtons(componentId, buttons);
     };
 
     validateDisplayName = (displayName) => {
@@ -164,12 +206,12 @@ export default class EditChannel extends PureComponent {
         } else if (displayName.length > ViewTypes.MAX_CHANNELNAME_LENGTH) {
             return {error: formatMessage(
                 messages.display_name_maxLength,
-                {maxLength: ViewTypes.MAX_CHANNELNAME_LENGTH}
+                {maxLength: ViewTypes.MAX_CHANNELNAME_LENGTH},
             )};
         } else if (displayName.length < ViewTypes.MIN_CHANNELNAME_LENGTH) {
             return {error: formatMessage(
                 messages.display_name_minLength,
-                {minLength: ViewTypes.MIN_CHANNELNAME_LENGTH}
+                {minLength: ViewTypes.MIN_CHANNELNAME_LENGTH},
             )};
         }
 
@@ -184,7 +226,7 @@ export default class EditChannel extends PureComponent {
         } else if (channelURL.length > ViewTypes.MAX_CHANNELNAME_LENGTH) {
             return {error: formatMessage(
                 messages.name_maxLength,
-                {maxLength: ViewTypes.MAX_CHANNELNAME_LENGTH}
+                {maxLength: ViewTypes.MAX_CHANNELNAME_LENGTH},
             )};
         }
 
@@ -196,7 +238,7 @@ export default class EditChannel extends PureComponent {
         return {error: formatMessage(messages.name_lowercase)};
     };
 
-    onUpdateChannel = () => {
+    onUpdateChannel = async () => {
         Keyboard.dismiss();
         const {displayName, channelURL, purpose, header} = this.state;
         const {channel: {id, type}} = this.props;
@@ -205,7 +247,7 @@ export default class EditChannel extends PureComponent {
             display_name: isDirect ? '' : displayName,
             name: channelURL,
             purpose,
-            header
+            header,
         };
 
         if (!isDirect) {
@@ -222,19 +264,9 @@ export default class EditChannel extends PureComponent {
             }
         }
 
-        this.props.actions.patchChannel(id, channel);
-    };
-
-    onNavigatorEvent = (event) => {
-        if (event.type === 'NavBarButtonPress') {
-            switch (event.id) {
-            case 'close-edit-channel':
-                this.close();
-                break;
-            case 'edit-channel':
-                this.onUpdateChannel();
-                break;
-            }
+        const data = await this.props.actions.patchChannel(id, channel);
+        if (data.error && data.error.server_error_id === 'store.sql_channel.update.archived_channel.app_error') {
+            this.props.actions.getChannel(id);
         }
     };
 
@@ -261,13 +293,12 @@ export default class EditChannel extends PureComponent {
                 name: oldChannelURL,
                 header: oldHeader,
                 purpose: oldPurpose,
-                type
+                type,
             },
-            navigator,
             theme,
             currentTeamUrl,
             deviceWidth,
-            deviceHeight
+            deviceHeight,
         } = this.props;
         const {
             error,
@@ -275,34 +306,38 @@ export default class EditChannel extends PureComponent {
             displayName,
             channelURL,
             purpose,
-            header
+            header,
         } = this.state;
 
         return (
-            <EditChannelInfo
-                navigator={navigator}
-                theme={theme}
-                enableRightButton={this.emitCanUpdateChannel}
-                error={error}
-                saving={updating}
-                channelType={type}
-                currentTeamUrl={currentTeamUrl}
-                onDisplayNameChange={this.onDisplayNameChange}
-                onChannelURLChange={this.onChannelURLChange}
-                onPurposeChange={this.onPurposeChange}
-                onHeaderChange={this.onHeaderChange}
-                displayName={displayName}
-                channelURL={channelURL}
-                header={header}
-                purpose={purpose}
-                editing={true}
-                oldDisplayName={oldDisplayName}
-                oldChannelURL={oldChannelURL}
-                oldPurpose={oldPurpose}
-                oldHeader={oldHeader}
-                deviceWidth={deviceWidth}
-                deviceHeight={deviceHeight}
-            />
+            <SafeAreaView
+                excludeHeader={true}
+                excludeFooter={true}
+            >
+                <EditChannelInfo
+                    theme={theme}
+                    enableRightButton={this.emitCanUpdateChannel}
+                    error={error}
+                    saving={updating}
+                    channelType={type}
+                    currentTeamUrl={currentTeamUrl}
+                    onDisplayNameChange={this.onDisplayNameChange}
+                    onChannelURLChange={this.onChannelURLChange}
+                    onPurposeChange={this.onPurposeChange}
+                    onHeaderChange={this.onHeaderChange}
+                    displayName={displayName}
+                    channelURL={channelURL}
+                    header={header}
+                    purpose={purpose}
+                    editing={true}
+                    oldDisplayName={oldDisplayName}
+                    oldChannelURL={oldChannelURL}
+                    oldPurpose={oldPurpose}
+                    oldHeader={oldHeader}
+                    deviceWidth={deviceWidth}
+                    deviceHeight={deviceHeight}
+                />
+            </SafeAreaView>
         );
     }
 }

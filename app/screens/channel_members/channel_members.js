@@ -1,332 +1,403 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
     Alert,
-    InteractionManager,
-    View
+    Platform,
+    View,
 } from 'react-native';
-import {injectIntl, intlShape} from 'react-intl';
+import {intlShape} from 'react-intl';
+import {Navigation} from 'react-native-navigation';
 
+import {debounce} from '@mm-redux/actions/helpers';
+import {General} from '@mm-redux/constants';
+import {filterProfilesMatchingTerm} from '@mm-redux/utils/user_utils';
+
+import {paddingHorizontal as padding} from 'app/components/safe_area_view/iphone_x_spacing';
 import Loading from 'app/components/loading';
-import CustomList from 'app/components/custom_list';
+import CustomList, {FLATLIST, SECTIONLIST} from 'app/components/custom_list';
+import UserListRow from 'app/components/custom_list/user_list_row';
+import FormattedText from 'app/components/formatted_text';
+import KeyboardLayout from 'app/components/layout/keyboard_layout';
 import SearchBar from 'app/components/search_bar';
 import StatusBar from 'app/components/status_bar';
 import {alertErrorIfInvalidPermissions} from 'app/utils/general';
-import {createMembersSections, loadingText, markSelectedProfiles} from 'app/utils/member_list';
-import UserListRow from 'app/components/custom_list/user_list_row';
-import {changeOpacity, makeStyleSheetFromTheme, setNavigatorStyles} from 'app/utils/theme';
+import {createProfilesSections, loadingText} from 'app/utils/member_list';
+import {
+    changeOpacity,
+    makeStyleSheetFromTheme,
+    getKeyboardAppearanceFromTheme,
+} from 'app/utils/theme';
+import {popTopScreen, setButtons} from 'app/actions/navigation';
 
-import {General, RequestStatus} from 'mattermost-redux/constants';
-import {filterProfilesMatchingTerm} from 'mattermost-redux/utils/user_utils';
-
-class ChannelMembers extends PureComponent {
+export default class ChannelMembers extends PureComponent {
     static propTypes = {
-        intl: intlShape.isRequired,
-        theme: PropTypes.object.isRequired,
-        currentChannel: PropTypes.object,
-        currentChannelMembers: PropTypes.array.isRequired,
-        currentUserId: PropTypes.string.isRequired,
-        navigator: PropTypes.object,
-        requestStatus: PropTypes.string,
-        searchRequestStatus: PropTypes.string,
-        removeMembersStatus: PropTypes.string,
-        canManageUsers: PropTypes.bool.isRequired,
         actions: PropTypes.shape({
             getProfilesInChannel: PropTypes.func.isRequired,
             handleRemoveChannelMembers: PropTypes.func.isRequired,
-            searchProfiles: PropTypes.func.isRequired
-        })
+            searchProfiles: PropTypes.func.isRequired,
+        }).isRequired,
+        componentId: PropTypes.string,
+        canManageUsers: PropTypes.bool.isRequired,
+        currentChannelId: PropTypes.string.isRequired,
+        currentChannelMembers: PropTypes.array,
+        currentUserId: PropTypes.string.isRequired,
+        theme: PropTypes.object.isRequired,
+        isLandscape: PropTypes.bool.isRequired,
     };
 
-    removeButton = {
-        disabled: true,
-        id: 'remove-members',
-        showAsAction: 'always'
+    static contextTypes = {
+        intl: intlShape.isRequired,
     };
 
-    constructor(props) {
-        super(props);
+    constructor(props, context) {
+        super(props, context);
 
         this.searchTimeoutId = 0;
+        this.page = -1;
+        this.next = true;
 
         this.state = {
-            canSelect: true,
-            next: true,
-            page: 0,
+            loading: false,
             profiles: [],
-            searching: false,
-            selectedMembers: {},
-            showNoResults: false,
-            term: ''
+            removing: false,
+            searchResults: [],
+            selectedIds: {},
+            term: '',
         };
-        this.removeButton.title = props.intl.formatMessage({id: 'channel_members_modal.remove', defaultMessage: 'Remove'});
 
-        props.navigator.setOnNavigatorEvent(this.onNavigatorEvent);
+        this.removeButton = {
+            color: props.theme.sidebarHeaderTextColor,
+            enabled: false,
+            id: 'remove-members',
+            showAsAction: 'always',
+            text: context.intl.formatMessage({id: 'channel_members_modal.remove', defaultMessage: 'Remove'}),
+        };
+
         if (props.canManageUsers) {
-            props.navigator.setButtons({
-                rightButtons: [this.removeButton]
+            setButtons(props.componentId, {
+                rightButtons: [this.removeButton],
             });
         }
     }
 
     componentDidMount() {
-        InteractionManager.runAfterInteractions(() => {
-            this.props.actions.getProfilesInChannel(this.props.currentChannel.id, 0);
-        });
+        this.navigationEventListener = Navigation.events().bindComponent(this);
 
-        this.emitCanRemoveMembers(false);
+        this.getProfiles();
     }
 
-    componentWillReceiveProps(nextProps) {
-        if (this.props.theme !== nextProps.theme) {
-            setNavigatorStyles(this.props.navigator, nextProps.theme);
-        }
+    componentDidUpdate() {
+        const {removing, selectedIds} = this.state;
+        const enabled = Object.keys(selectedIds).length > 0 && !removing;
 
-        const {requestStatus} = this.props;
-        if (requestStatus === RequestStatus.STARTED &&
-            nextProps.requestStatus === RequestStatus.SUCCESS) {
-            const {page} = this.state;
-            const profiles = markSelectedProfiles(
-                nextProps.currentChannelMembers.slice(0, (page + 1) * General.PROFILE_CHUNK_SIZE),
-                this.state.selectedMembers
-            );
-            this.setState({profiles, showNoResults: true});
-        } else if (this.state.searching &&
-            nextProps.searchRequestStatus === RequestStatus.SUCCESS) {
-            const results = markSelectedProfiles(
-                filterProfilesMatchingTerm(nextProps.currentChannelMembers, this.state.term),
-                this.state.selectedMembers
-            );
-            this.setState({profiles: results, showNoResults: true});
-        }
+        this.enableRemoveOption(enabled);
+    }
 
-        const {removeMembersStatus} = nextProps;
-
-        if (this.props.removeMembersStatus !== removeMembersStatus) {
-            switch (removeMembersStatus) {
-            case RequestStatus.STARTED:
-                this.emitRemoving(true);
-                this.setState({error: null, canSelect: false, removing: true});
-                break;
-            case RequestStatus.SUCCESS:
-                this.emitRemoving(false);
-                this.setState({error: null, canSelect: false, removing: false});
-                this.close();
-                break;
-            case RequestStatus.FAILURE:
-                this.emitRemoving(false);
-                this.setState({canSelect: true, removing: false});
-                break;
-            }
+    navigationButtonPressed({buttonId}) {
+        if (buttonId === this.removeButton.id) {
+            this.handleRemoveMembersPress();
         }
     }
 
-    cancelSearch = () => {
-        this.setState({
-            searching: false,
-            term: '',
-            page: 0,
-            profiles: markSelectedProfiles(this.props.currentChannelMembers, this.state.selectedMembers)
-        });
+    setSearchBarRef = (ref) => {
+        this.searchBarRef = ref;
+    }
+
+    clearSearch = () => {
+        this.setState({term: '', searchResults: []});
     };
 
     close = () => {
-        this.props.navigator.pop({animated: true});
+        popTopScreen();
     };
 
-    emitCanRemoveMembers = (enabled) => {
-        if (this.props.canManageUsers) {
-            this.props.navigator.setButtons({
-                rightButtons: [{...this.removeButton, disabled: !enabled}]
+    enableRemoveOption = (enabled) => {
+        const {canManageUsers, componentId} = this.props;
+        if (canManageUsers) {
+            setButtons(componentId, {
+                rightButtons: [{...this.removeButton, enabled}],
             });
         }
     };
 
-    emitRemoving = (loading) => {
-        this.setState({canSelect: false, removing: loading});
+    getProfiles = debounce(() => {
+        const {loading, term} = this.state;
+        if (this.next && !loading && !term) {
+            this.setState({loading: true}, () => {
+                const {actions, currentChannelId} = this.props;
 
-        if (this.props.canManageUsers) {
-            this.props.navigator.setButtons({
-                rightButtons: [{...this.removeButton, disabled: loading}]
+                actions.getProfilesInChannel(
+                    currentChannelId,
+                    this.page + 1,
+                    General.PROFILE_CHUNK_SIZE,
+                ).then(this.loadedProfiles);
             });
         }
-    };
+    }, 100);
 
     handleRemoveMembersPress = () => {
-        const {selectedMembers} = this.state;
-        const membersToRemove = Object.keys(selectedMembers).filter((m) => selectedMembers[m]);
+        const {formatMessage} = this.context.intl;
+        const {selectedIds, removing} = this.state;
+        const membersToRemove = Object.keys(selectedIds).filter((id) => selectedIds[id]);
 
-        const {formatMessage} = this.props.intl;
         if (!membersToRemove.length) {
             Alert.alert(
                 formatMessage({
                     id: 'mobile.routes.channel_members.action',
-                    defaultMessage: 'Remove Members'
+                    defaultMessage: 'Remove Members',
                 }),
                 formatMessage({
                     id: 'mobile.routes.channel_members.action_message',
-                    defaultMessage: 'You must select at least one member to remove from the channel.'
-                })
+                    defaultMessage: 'You must select at least one member to remove from the channel.',
+                }),
             );
             return;
         }
 
-        Alert.alert(
-            formatMessage({
-                id: 'mobile.routes.channel_members.action',
-                defaultMessage: 'Remove Members'
-            }),
-            formatMessage({
-                id: 'mobile.routes.channel_members.action_message_confirm',
-                defaultMessage: 'Are you sure you want to remove the selected members from the channel?'
-            }),
-            [{
-                text: formatMessage({id: 'mobile.channel_list.alertNo', defaultMessage: 'No'})
-            }, {
-                text: formatMessage({id: 'mobile.channel_list.alertYes', defaultMessage: 'Yes'}),
-                onPress: () => this.removeMembers(membersToRemove)
-            }]
-        );
-    };
-
-    handleRowSelect = (id) => {
-        const selectedMembers = Object.assign({}, this.state.selectedMembers, {[id]: !this.state.selectedMembers[id]});
-        if (Object.values(selectedMembers).filter((selected) => selected).length) {
-            this.emitCanRemoveMembers(true);
-        } else {
-            this.emitCanRemoveMembers(false);
-        }
-        this.setState({
-            profiles: markSelectedProfiles(this.state.profiles, selectedMembers),
-            selectedMembers
-        });
-    };
-
-    loadMoreMembers = () => {
-        const {actions, requestStatus, currentChannel} = this.props;
-        const {next, searching} = this.state;
-        let {page} = this.state;
-        if (requestStatus !== RequestStatus.STARTED && next && !searching) {
-            page = page + 1;
-            actions.getProfilesInChannel(currentChannel.id, page, General.PROFILE_CHUNK_SIZE).then(
-                ({data}) => {
-                    if (data && data.length) {
-                        this.setState({
-                            page
-                        });
-                    } else {
-                        this.setState({next: false});
-                    }
-                }
+        if (!removing) {
+            Alert.alert(
+                formatMessage({
+                    id: 'mobile.routes.channel_members.action',
+                    defaultMessage: 'Remove Members',
+                }),
+                formatMessage({
+                    id: 'mobile.routes.channel_members.action_message_confirm',
+                    defaultMessage: 'Are you sure you want to remove the selected members from the channel?',
+                }),
+                [{
+                    text: formatMessage({id: 'mobile.channel_list.alertNo', defaultMessage: 'No'}),
+                }, {
+                    text: formatMessage({id: 'mobile.channel_list.alertYes', defaultMessage: 'Yes'}),
+                    onPress: () => this.removeMembers(membersToRemove),
+                }],
             );
         }
     };
 
-    onNavigatorEvent = (event) => {
-        if (event.type === 'NavBarButtonPress') {
-            if (event.id === 'remove-members') {
-                this.handleRemoveMembersPress();
+    handleSelectProfile = (id) => {
+        const {canManageUsers} = this.props;
+        const {selectedIds} = this.state;
+
+        if (canManageUsers) {
+            const newSelected = Object.assign({}, selectedIds, {[id]: !selectedIds[id]});
+
+            if (Object.values(newSelected).filter((selected) => selected).length) {
+                this.enableRemoveOption(true);
+            } else {
+                this.enableRemoveOption(false);
             }
+
+            this.setState({selectedIds: newSelected});
+        }
+    };
+
+    loadedProfiles = ({data}) => {
+        const {profiles} = this.state;
+        if (data && !data.length) {
+            this.next = false;
+        }
+
+        this.page += 1;
+        this.setState({loading: false, profiles: [...profiles, ...data]});
+    };
+
+    onSearch = (text) => {
+        if (text) {
+            this.setState({term: text});
+            clearTimeout(this.searchTimeoutId);
+
+            this.searchTimeoutId = setTimeout(() => {
+                this.searchProfiles(text);
+            }, General.SEARCH_TIMEOUT_MILLISECONDS);
+        } else {
+            this.clearSearch();
         }
     };
 
     removeMembers = async (membersToRemove) => {
-        const {actions, currentChannel} = this.props;
-        alertErrorIfInvalidPermissions(
-            await actions.handleRemoveChannelMembers(currentChannel.id, membersToRemove)
-        );
+        const {actions, currentChannelId} = this.props;
+        this.enableRemoveOption(false);
+        this.setState({adding: true}, async () => {
+            const result = await actions.handleRemoveChannelMembers(currentChannelId, membersToRemove);
+
+            if (result.error) {
+                alertErrorIfInvalidPermissions(result);
+                this.enableRemoveOption(true);
+                this.setState({removing: false});
+            } else {
+                this.close();
+            }
+        });
     };
 
-    renderMemberRow = (props) => {
-        const enabled = props.id !== this.props.currentUserId;
-
+    renderItem = (props, selectProps) => {
         return (
             <UserListRow
+                key={props.id}
                 {...props}
-                selectable={true}
-                enabled={enabled}
+                {...selectProps}
             />
+        );
+    }
+
+    renderSelectableItem = (props) => {
+        // The list will re-render when the selection changes because selectedIds is passed into the list as extraData
+        const selectProps = {
+            selectable: true,
+            selected: this.state.selectedIds[props.id],
+            enabled: props.id !== this.props.currentUserId,
+        };
+
+        return this.renderItem(props, selectProps);
+    }
+
+    renderUnselectableItem = (props) => {
+        const selectProps = {
+            selectable: false,
+            enabled: false,
+        };
+
+        return this.renderItem(props, selectProps);
+    };
+
+    renderLoading = () => {
+        const {theme} = this.props;
+        const {loading} = this.state;
+        const style = getStyleFromTheme(theme);
+
+        if (!loading) {
+            return null;
+        }
+
+        return (
+            <View style={style.loadingContainer}>
+                <FormattedText
+                    {...loadingText}
+                    style={style.loadingText}
+                />
+            </View>
         );
     };
 
-    searchProfiles = (text) => {
-        const term = text;
+    renderNoResults = () => {
+        const {loading} = this.state;
+        const {theme, isLandscape} = this.props;
+        const style = getStyleFromTheme(theme);
 
-        if (term) {
-            this.setState({searching: true, term});
-            clearTimeout(this.searchTimeoutId);
-
-            this.searchTimeoutId = setTimeout(() => {
-                this.props.actions.searchProfiles(term.toLowerCase(), {in_channel_id: this.props.currentChannel.id});
-            }, General.SEARCH_TIMEOUT_MILLISECONDS);
-        } else {
-            this.cancelSearch();
+        if (loading || this.page === -1) {
+            return null;
         }
+
+        return (
+            <View style={[style.noResultContainer, padding(isLandscape)]}>
+                <FormattedText
+                    id='mobile.custom_list.no_results'
+                    defaultMessage='No Results'
+                    style={style.noResultText}
+                />
+            </View>
+        );
+    };
+
+    searchProfiles = (term) => {
+        const {actions, currentChannelId} = this.props;
+        const options = {in_channel_id: currentChannelId};
+        this.setState({loading: true});
+
+        actions.searchProfiles(term.toLowerCase(), options).then(({data}) => {
+            this.setState({searchResults: data, loading: false});
+        });
     };
 
     render() {
-        const {canManageUsers, intl, requestStatus, searchRequestStatus, theme} = this.props;
-        const {formatMessage} = intl;
-        const {profiles, removing, searching, showNoResults, term} = this.state;
-        const isLoading = (requestStatus === RequestStatus.STARTED) || (requestStatus.status === RequestStatus.NOT_STARTED) ||
-            (searchRequestStatus === RequestStatus.STARTED);
-        const more = searching ? () => true : this.loadMoreMembers;
+        const {formatMessage} = this.context.intl;
+        const {theme, canManageUsers, isLandscape} = this.props;
+        const {
+            removing,
+            loading,
+            profiles,
+            searchResults,
+            selectedIds,
+            term,
+        } = this.state;
         const style = getStyleFromTheme(theme);
 
         if (removing) {
             return (
                 <View style={style.container}>
                     <StatusBar/>
-                    <Loading/>
+                    <Loading color={theme.centerChannelColor}/>
                 </View>
             );
         }
 
+        const searchBarInput = {
+            backgroundColor: changeOpacity(theme.centerChannelColor, 0.2),
+            color: theme.centerChannelColor,
+            fontSize: 15,
+
+        };
+
+        let data;
+        let listType;
+        if (term) {
+            const exactMatches = [];
+            const results = filterProfilesMatchingTerm(searchResults, term).filter((p) => {
+                if (p.username === term || p.username.startsWith(term)) {
+                    exactMatches.push(p);
+                    return false;
+                }
+
+                return true;
+            });
+            data = [...exactMatches, ...results];
+            listType = FLATLIST;
+        } else {
+            data = createProfilesSections(profiles);
+            listType = SECTIONLIST;
+        }
+
         return (
-            <View style={style.container}>
+            <KeyboardLayout>
                 <StatusBar/>
-                <View
-                    style={{marginVertical: 5}}
-                >
+                <View style={[style.searchBar, padding(isLandscape)]}>
                     <SearchBar
-                        ref='search_bar'
+                        ref={this.setSearchBarRef}
                         placeholder={formatMessage({id: 'search_bar.search', defaultMessage: 'Search'})}
                         cancelTitle={formatMessage({id: 'mobile.post.cancel', defaultMessage: 'Cancel'})}
                         backgroundColor='transparent'
                         inputHeight={33}
-                        inputStyle={{
-                            backgroundColor: changeOpacity(theme.centerChannelColor, 0.2),
-                            color: theme.centerChannelColor,
-                            fontSize: 15,
-                            lineHeight: 66
-                        }}
+                        inputStyle={searchBarInput}
                         placeholderTextColor={changeOpacity(theme.centerChannelColor, 0.5)}
                         tintColorSearch={changeOpacity(theme.centerChannelColor, 0.5)}
                         tintColorDelete={changeOpacity(theme.centerChannelColor, 0.5)}
                         titleCancelColor={theme.centerChannelColor}
-                        onChangeText={this.searchProfiles}
-                        onSearchButtonPress={this.searchProfiles}
-                        onCancelButtonPress={this.cancelSearch}
+                        onChangeText={this.onSearch}
+                        onSearchButtonPress={this.onSearch}
+                        onCancelButtonPress={this.clearSearch}
+                        autoCapitalize='none'
+                        keyboardAppearance={getKeyboardAppearanceFromTheme(theme)}
                         value={term}
                     />
                 </View>
                 <CustomList
-                    data={profiles}
+                    data={data}
+                    extraData={selectedIds}
+                    key='custom_list'
+                    listType={listType}
+                    loading={loading}
+                    loadingComponent={this.renderLoading()}
+                    noResults={this.renderNoResults()}
+                    onLoadMore={this.getProfiles}
+                    onRowPress={this.handleSelectProfile}
+                    renderItem={canManageUsers ? this.renderSelectableItem : this.renderUnselectableItem}
                     theme={theme}
-                    searching={searching}
-                    onListEndReached={more}
-                    listScrollRenderAheadDistance={50}
-                    loading={isLoading}
-                    loadingText={loadingText}
-                    onRowSelect={canManageUsers && this.state.canSelect ? this.handleRowSelect : null}
-                    renderRow={this.renderMemberRow}
-                    createSections={createMembersSections}
-                    showNoResults={showNoResults}
+                    isLandscape={isLandscape}
                 />
-            </View>
+            </KeyboardLayout>
         );
     }
 }
@@ -335,9 +406,34 @@ const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
             flex: 1,
-            backgroundColor: theme.centerChannelBg
-        }
+        },
+        searchBar: {
+            marginVertical: 5,
+            height: 38,
+            ...Platform.select({
+                ios: {
+                    paddingLeft: 8,
+                },
+            }),
+        },
+        loadingContainer: {
+            alignItems: 'center',
+            backgroundColor: theme.centerChannelBg,
+            height: 70,
+            justifyContent: 'center',
+        },
+        loadingText: {
+            color: changeOpacity(theme.centerChannelColor, 0.6),
+        },
+        noResultContainer: {
+            flexGrow: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        noResultText: {
+            fontSize: 26,
+            color: changeOpacity(theme.centerChannelColor, 0.5),
+        },
     };
 });
-
-export default injectIntl(ChannelMembers);

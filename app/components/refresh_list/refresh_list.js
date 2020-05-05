@@ -1,12 +1,12 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import {RefreshControl} from 'react-native';
 
 export default class RefreshList extends PureComponent {
     static propTypes = {
-        ...RefreshControl.propTypes
+        ...RefreshControl.propTypes,
     };
 
     render() {

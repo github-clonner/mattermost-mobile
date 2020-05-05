@@ -1,5 +1,5 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
@@ -8,16 +8,17 @@ import {
     ScrollView,
     Text,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
 import DeviceInfo from 'react-native-device-info';
 
 import FormattedText from 'app/components/formatted_text';
 import StatusBar from 'app/components/status_bar';
-import {changeOpacity, makeStyleSheetFromTheme, setNavigatorStyles} from 'app/utils/theme';
-
+import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
+import {paddingHorizontal as padding} from 'app/components/safe_area_view/iphone_x_spacing';
 import AppIcon from 'app/components/app_icon';
 import Config from 'assets/config';
+import AboutLinks from 'app/constants/about_links';
 
 const MATTERMOST_BUNDLE_IDS = ['com.mattermost.rnbeta', 'com.mattermost.rn'];
 
@@ -25,15 +26,9 @@ export default class About extends PureComponent {
     static propTypes = {
         config: PropTypes.object.isRequired,
         license: PropTypes.object.isRequired,
-        navigator: PropTypes.object.isRequired,
-        theme: PropTypes.object.isRequired
+        theme: PropTypes.object.isRequired,
+        isLandscape: PropTypes.bool.isRequired,
     };
-
-    componentWillReceiveProps(nextProps) {
-        if (this.props.theme !== nextProps.theme) {
-            setNavigatorStyles(this.props.navigator, nextProps.theme);
-        }
-    }
 
     handleAboutTeam = () => {
         Linking.openURL(Config.AboutTeamURL);
@@ -51,8 +46,16 @@ export default class About extends PureComponent {
         Linking.openURL(Config.MobileNoticeURL);
     };
 
+    handleTermsOfService = () => {
+        Linking.openURL(AboutLinks.TERMS_OF_SERVICE);
+    };
+
+    handlePrivacyPolicy = () => {
+        Linking.openURL(AboutLinks.PRIVACY_POLICY);
+    }
+
     render() {
-        const {theme, config, license} = this.props;
+        const {theme, config, license, isLandscape} = this.props;
         const style = getStyleSheet(theme);
 
         let title = (
@@ -139,7 +142,7 @@ export default class About extends PureComponent {
                             defaultMessage='Licensed to: {company}'
                             style={style.info}
                             values={{
-                                company: license.Company
+                                company: license.Company,
                             }}
                         />
                     </View>
@@ -155,7 +158,7 @@ export default class About extends PureComponent {
                     defaultMessage='Server Version: {version}'
                     style={style.info}
                     values={{
-                        version: config.Version
+                        version: config.Version,
                     }}
                 />
             );
@@ -167,9 +170,42 @@ export default class About extends PureComponent {
                     style={style.info}
                     values={{
                         version: config.Version,
-                        number: config.BuildNumber
+                        number: config.BuildNumber,
                     }}
                 />
+            );
+        }
+
+        let termsOfService;
+        if (config.TermsOfServiceLink) {
+            termsOfService = (
+                <FormattedText
+                    id='mobile.tos_link'
+                    defaultMessage='Terms of Service'
+                    style={style.noticeLink}
+                    onPress={this.handleTermsOfService}
+                />
+            );
+        }
+
+        let privacyPolicy;
+        if (config.PrivacyPolicyLink) {
+            privacyPolicy = (
+                <FormattedText
+                    id='mobile.privacy_link'
+                    defaultMessage='Privacy Policy'
+                    style={style.noticeLink}
+                    onPress={this.handlePrivacyPolicy}
+                />
+            );
+        }
+
+        let tosPrivacyHyphen;
+        if (termsOfService && privacyPolicy) {
+            tosPrivacyHyphen = (
+                <Text style={[style.footerText, style.hyphenText]}>
+                    {' - '}
+                </Text>
             );
         }
 
@@ -177,7 +213,7 @@ export default class About extends PureComponent {
             <View style={style.wrapper}>
                 <StatusBar/>
                 <ScrollView
-                    style={style.scrollView}
+                    style={[style.scrollView, padding(isLandscape)]}
                     contentContainerStyle={style.scrollViewContent}
                 >
                     <View style={style.logoContainer}>
@@ -201,7 +237,7 @@ export default class About extends PureComponent {
                             style={style.info}
                             values={{
                                 version: DeviceInfo.getVersion(),
-                                number: DeviceInfo.getBuildNumber()
+                                number: DeviceInfo.getBuildNumber(),
                             }}
                         />
                         {serverVersion}
@@ -210,7 +246,7 @@ export default class About extends PureComponent {
                             defaultMessage='Database: {type}'
                             style={style.info}
                             values={{
-                                type: config.SQLDriverName
+                                type: config.SQLDriverName,
                             }}
                         />
                         {licensee}
@@ -221,18 +257,23 @@ export default class About extends PureComponent {
                                 defaultMessage='{site} is powered by Mattermost'
                                 style={style.footerText}
                                 values={{
-                                    site: this.props.config.SiteName
+                                    site: this.props.config.SiteName,
                                 }}
                             />
                         }
                         <FormattedText
                             id='mobile.about.copyright'
                             defaultMessage='Copyright 2015-{currentYear} Mattermost, Inc. All rights reserved'
-                            style={style.footerText}
+                            style={[style.footerText, style.copyrightText]}
                             values={{
-                                currentYear: new Date().getFullYear()
+                                currentYear: new Date().getFullYear(),
                             }}
                         />
+                        <View style={style.tosPrivacyContainer}>
+                            {termsOfService}
+                            {tosPrivacyHyphen}
+                            {privacyPolicy}
+                        </View>
                         <View style={style.noticeContainer}>
                             <View style={style.footerGroup}>
                                 <FormattedText
@@ -243,7 +284,7 @@ export default class About extends PureComponent {
                                         platform: (
                                             <FormattedText
                                                 id='mobile.notice_platform_link'
-                                                defaultMessage='platform'
+                                                defaultMessage='server'
                                                 style={style.noticeLink}
                                                 onPress={this.handlePlatformNotice}
                                             />
@@ -255,7 +296,7 @@ export default class About extends PureComponent {
                                                 style={[style.noticeLink, {marginLeft: 5}]}
                                                 onPress={this.handleMobileNotice}
                                             />
-                                        )
+                                        ),
                                     }}
                                 />
                             </View>
@@ -265,20 +306,20 @@ export default class About extends PureComponent {
                                 <FormattedText
                                     id='about.hash'
                                     defaultMessage='Build Hash:'
-                                    style={style.footerText}
+                                    style={style.footerTitleText}
                                 />
                                 <Text style={style.footerText}>
-                                    {'\u00a0' + config.BuildHash}
+                                    {config.BuildHash}
                                 </Text>
                             </View>
                             <View style={style.footerGroup}>
                                 <FormattedText
                                     id='about.hashee'
                                     defaultMessage='EE Build Hash:'
-                                    style={style.footerText}
+                                    style={style.footerTitleText}
                                 />
                                 <Text style={style.footerText}>
-                                    {'\u00a0' + config.BuildHashEnterprise}
+                                    {config.BuildHashEnterprise}
                                 </Text>
                             </View>
                         </View>
@@ -286,10 +327,10 @@ export default class About extends PureComponent {
                             <FormattedText
                                 id='about.date'
                                 defaultMessage='Build Date:'
-                                style={style.footerText}
+                                style={style.footerTitleText}
                             />
                             <Text style={style.footerText}>
-                                {'\u00a0' + config.BuildDate}
+                                {config.BuildDate}
                             </Text>
                         </View>
                     </View>
@@ -303,85 +344,99 @@ const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
         wrapper: {
             flex: 1,
-            backgroundColor: theme.centerChannelBg
         },
         scrollView: {
             flex: 1,
-            backgroundColor: changeOpacity(theme.centerChannelColor, 0.06)
+            backgroundColor: changeOpacity(theme.centerChannelColor, 0.06),
         },
         scrollViewContent: {
-            paddingBottom: 30
+            paddingBottom: 30,
         },
         logoContainer: {
             alignItems: 'center',
             flex: 1,
             height: 200,
-            paddingVertical: 40
+            paddingVertical: 40,
         },
         infoContainer: {
             flex: 1,
             flexDirection: 'column',
-            paddingHorizontal: 20
+            paddingHorizontal: 20,
         },
         titleContainer: {
             flex: 1,
-            flexDirection: 'row',
-            marginBottom: 20
+            marginBottom: 20,
         },
         title: {
             fontSize: 22,
-            color: theme.centerChannelColor
+            color: theme.centerChannelColor,
         },
         subtitle: {
             color: changeOpacity(theme.centerChannelColor, 0.5),
             fontSize: 19,
-            marginBottom: 15
+            marginBottom: 15,
         },
         learnContainer: {
             flex: 1,
             flexDirection: 'column',
-            marginVertical: 20
+            marginVertical: 20,
         },
         learn: {
             color: theme.centerChannelColor,
-            fontSize: 16
+            fontSize: 16,
         },
         learnLink: {
             color: theme.linkColor,
-            fontSize: 16
+            fontSize: 16,
         },
         info: {
             color: theme.centerChannelColor,
             fontSize: 16,
-            lineHeight: 19
+            lineHeight: 19,
         },
         licenseContainer: {
             flex: 1,
             flexDirection: 'row',
-            marginTop: 20
+            marginTop: 20,
         },
         noticeContainer: {
             flex: 1,
-            flexDirection: 'column'
+            flexDirection: 'column',
         },
         noticeLink: {
             color: theme.linkColor,
             fontSize: 11,
-            lineHeight: 13
+            lineHeight: 13,
         },
         hashContainer: {
             flex: 1,
-            flexDirection: 'column'
+            flexDirection: 'column',
         },
         footerGroup: {
             flex: 1,
-            flexDirection: 'row'
+        },
+        footerTitleText: {
+            color: changeOpacity(theme.centerChannelColor, 0.5),
+            fontSize: 11,
+            fontWeight: '600',
+            lineHeight: 13,
         },
         footerText: {
             color: changeOpacity(theme.centerChannelColor, 0.5),
             fontSize: 11,
             lineHeight: 13,
-            marginBottom: 10
-        }
+            marginBottom: 10,
+        },
+        copyrightText: {
+            marginBottom: 0,
+        },
+        hyphenText: {
+            marginBottom: 0,
+        },
+        tosPrivacyContainer: {
+            flex: 1,
+            flexDirection: 'row',
+            marginBottom: 10,
+        },
     };
 });

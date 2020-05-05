@@ -1,6 +1,8 @@
+/* eslint-disable header/header */
+
 // Copyright (c) 2016-2017 Charles.
-// Modified work: Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Modified work: Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
@@ -8,13 +10,12 @@ import {
     ActivityIndicator,
     Animated,
     AppState,
-    Image,
     TouchableOpacity,
-    TouchableWithoutFeedback,
     StyleSheet,
     Text,
-    View
+    View,
 } from 'react-native';
+import FastImage from 'react-native-fast-image';
 import Slider from 'react-native-slider';
 
 import fullscreenImage from 'assets/images/video_player/fullscreen.png';
@@ -25,7 +26,7 @@ import replayImage from 'assets/images/video_player/replay.png';
 export const PLAYER_STATE = {
     PLAYING: 0,
     PAUSED: 1,
-    ENDED: 2
+    ENDED: 2,
 };
 
 export default class VideoControls extends PureComponent {
@@ -40,19 +41,20 @@ export default class VideoControls extends PureComponent {
         onSeek: PropTypes.func,
         onSeeking: PropTypes.func,
         playerState: PropTypes.number,
-        progress: PropTypes.number
+        progress: PropTypes.number,
     };
 
     static defaultProps = {
         duration: 0,
-        mainColor: 'rgba(12, 83, 175, 0.9)'
+        mainColor: 'rgba(12, 83, 175, 0.9)',
     };
 
     constructor(props) {
         super(props);
         this.state = {
             opacity: new Animated.Value(1),
-            isVisible: true
+            isVisible: true,
+            isSeeking: false,
         };
     }
 
@@ -79,7 +81,12 @@ export default class VideoControls extends PureComponent {
 
     fadeInControls = (loop = true) => {
         this.setState({isVisible: true});
-        Animated.timing(this.state.opacity, {toValue: 1, duration: 250, delay: 0}).start(() => {
+        Animated.timing(this.state.opacity, {
+            toValue: 1,
+            duration: 250,
+            delay: 0,
+            useNativeDriver: true,
+        }).start(() => {
             if (loop) {
                 this.fadeOutControls(2000);
             }
@@ -87,7 +94,12 @@ export default class VideoControls extends PureComponent {
     };
 
     fadeOutControls = (delay = 0) => {
-        Animated.timing(this.state.opacity, {toValue: 0, duration: 250, delay}).start((result) => {
+        Animated.timing(this.state.opacity, {
+            toValue: 0,
+            duration: 250,
+            delay,
+            useNativeDriver: true,
+        }).start((result) => {
             if (result.finished) {
                 this.setState({isVisible: false});
             }
@@ -136,14 +148,9 @@ export default class VideoControls extends PureComponent {
     };
 
     renderControls() {
-        if (!this.state.isVisible) {
-            return null;
-        }
-
         return (
             <View style={styles.container}>
-                <View style={styles.controlsRow}/>
-                <View style={[styles.controlsRow]}>
+                <View style={[styles.controlsRow, StyleSheet.absoluteFill]}>
                     {
                         this.props.isLoading ? this.setLoadingView() : this.setPlayerControls(this.props.playerState)
                     }
@@ -160,8 +167,9 @@ export default class VideoControls extends PureComponent {
                         </View>
                         <Slider
                             style={styles.progressSlider}
-                            onSlidingComplete={this.seekVideo}
-                            onSlidingStart={this.seekStart}
+                            onSlidingComplete={this.seekVideoEnd}
+                            onValueChange={this.seekVideo}
+                            onSlidingStart={this.seekVideoStart}
                             maximumValue={Math.floor(this.props.duration)}
                             value={Math.floor(this.props.progress)}
                             trackStyle={styles.track}
@@ -173,23 +181,37 @@ export default class VideoControls extends PureComponent {
                         style={styles.fullScreenContainer}
                         onPress={this.props.onFullScreen}
                     >
-                        <Image source={fullscreenImage}/>
+                        <FastImage
+                            source={fullscreenImage}
+                            style={{width: 20, height: 20}}
+                        />
                     </TouchableOpacity>
                 </View>
             </View>
         );
     }
 
-    seekStart = () => {
-        if (this.props.onSeeking) {
-            this.props.onSeeking(false);
-        }
+    seekVideo = (value) => {
+        this.setState({isSeeking: true});
+        this.props.onSeek(value);
     };
 
-    seekVideo = (value) => {
+    seekVideoEnd = (value) => {
+        this.setState({isSeeking: false});
+        if (this.props.playerState === PLAYER_STATE.PLAYING) {
+            this.toggleControls();
+        }
         this.props.onSeek(value);
         if (this.props.onSeeking) {
             this.props.onSeeking(true);
+        }
+    };
+
+    seekVideoStart = () => {
+        this.setState({isSeeking: true});
+        this.cancelAnimation();
+        if (this.props.onSeeking) {
+            this.props.onSeeking(false);
         }
     };
 
@@ -201,7 +223,7 @@ export default class VideoControls extends PureComponent {
                 style={[styles.playButton, {backgroundColor: this.props.mainColor}]}
                 onPress={pressAction}
             >
-                <Image
+                <FastImage
                     source={icon}
                     style={styles.playIcon}
                 />
@@ -231,12 +253,14 @@ export default class VideoControls extends PureComponent {
     };
 
     render() {
+        if (!this.state.isVisible) {
+            return null;
+        }
+
         return (
-            <TouchableWithoutFeedback onPress={this.toggleControls}>
-                <Animated.View style={[styles.container, {opacity: this.state.opacity}]}>
-                    {this.renderControls()}
-                </Animated.View>
-            </TouchableWithoutFeedback>
+            <Animated.View style={[styles.container, {opacity: this.state.opacity}]}>
+                {this.renderControls()}
+            </Animated.View>
         );
     }
 }
@@ -249,21 +273,20 @@ const styles = StyleSheet.create({
         paddingVertical: 13,
         flexDirection: 'column',
         alignItems: 'center',
-        backgroundColor: 'rgba(45, 59, 62, 0.4)',
+        backgroundColor: 'transparent',
         justifyContent: 'space-between',
         top: 0,
         left: 0,
         bottom: 0,
-        right: 0
+        right: 0,
     },
     controlsRow: {
-        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        alignSelf: 'stretch'
+        alignSelf: 'stretch',
     },
     timeRow: {
-        alignSelf: 'stretch'
+        alignSelf: 'stretch',
     },
     playButton: {
         justifyContent: 'center',
@@ -272,54 +295,57 @@ const styles = StyleSheet.create({
         height: 50,
         borderRadius: 3,
         borderWidth: 1.5,
-        borderColor: 'rgba(255,255,255,0.5)'
+        borderColor: 'rgba(255,255,255,0.5)',
     },
     playIcon: {
         width: 22,
         height: 22,
-        resizeMode: 'contain'
+        resizeMode: 'contain',
     },
     replayIcon: {
         width: 25,
         height: 20,
-        resizeMode: 'stretch'
+        resizeMode: 'stretch',
     },
     progressContainer: {
+        position: 'absolute',
         flexDirection: 'row',
         justifyContent: 'flex-end',
-        marginBottom: -25
+        bottom: 25,
+        marginLeft: 16,
     },
     progressColumnContainer: {
-        flex: 1
+        flex: 1,
     },
     fullScreenContainer: {
         alignSelf: 'stretch',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingLeft: 20
+        paddingLeft: 10,
+        paddingTop: 8,
     },
     progressSlider: {
-        alignSelf: 'stretch'
+        alignSelf: 'stretch',
     },
     timerLabelsContainer: {
         alignSelf: 'stretch',
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: -7
+        marginBottom: -7,
     },
     timerLabel: {
         fontSize: 12,
-        color: 'white'
+        color: 'white',
     },
     track: {
         height: 5,
-        borderRadius: 1
+        borderRadius: 1,
     },
     thumb: {
         width: 20,
         height: 20,
         borderRadius: 50,
         backgroundColor: 'white',
-        borderWidth: 3
-    }
+        borderWidth: 3,
+    },
 });

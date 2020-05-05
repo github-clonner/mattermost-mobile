@@ -1,10 +1,10 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
     Animated,
-    StyleSheet
+    StyleSheet,
 } from 'react-native';
 import FormattedText from 'app/components/formatted_text';
 
@@ -12,16 +12,16 @@ const {View: AnimatedView} = Animated;
 
 export default class RetryBarIndicator extends PureComponent {
     static propTypes = {
-        failed: PropTypes.bool
+        failed: PropTypes.bool,
     };
 
     state = {
-        retryMessageHeight: new Animated.Value(0)
+        retryMessageHeight: new Animated.Value(0),
     };
 
-    componentWillReceiveProps(nextProps) {
-        if (this.props.failed !== nextProps.failed) {
-            this.toggleRetryMessage(nextProps.failed);
+    componentDidUpdate(prevProps) {
+        if (this.props.failed !== prevProps.failed) {
+            this.toggleRetryMessage(this.props.failed);
         }
     }
 
@@ -29,14 +29,15 @@ export default class RetryBarIndicator extends PureComponent {
         const value = show ? 38 : 0;
         Animated.timing(this.state.retryMessageHeight, {
             toValue: value,
-            duration: 350
+            duration: 350,
+            useNativeDriver: false,
         }).start();
     };
 
     render() {
         const {retryMessageHeight} = this.state;
         const refreshIndicatorDimensions = {
-            height: retryMessageHeight
+            height: retryMessageHeight,
         };
 
         return (
@@ -60,6 +61,6 @@ const style = StyleSheet.create({
         position: 'absolute',
         top: 0,
         overflow: 'hidden',
-        width: '100%'
-    }
+        width: '100%',
+    },
 });

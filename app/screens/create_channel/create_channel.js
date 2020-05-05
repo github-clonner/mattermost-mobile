@@ -1,23 +1,25 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {intlShape} from 'react-intl';
 import {
     Keyboard,
-    InteractionManager
+    InteractionManager,
 } from 'react-native';
+import {Navigation} from 'react-native-navigation';
 
-import {General, RequestStatus} from 'mattermost-redux/constants';
-import EventEmitter from 'mattermost-redux/utils/event_emitter';
+import {General, RequestStatus} from '@mm-redux/constants';
+import EventEmitter from '@mm-redux/utils/event_emitter';
 
+import {popTopScreen, dismissModal, setButtons} from 'app/actions/navigation';
 import EditChannelInfo from 'app/components/edit_channel_info';
-import {setNavigatorStyles} from 'app/utils/theme';
+import {NavigationTypes} from 'app/constants';
 
 export default class CreateChannel extends PureComponent {
     static propTypes = {
-        navigator: PropTypes.object.isRequired,
+        componentId: PropTypes.string,
         theme: PropTypes.object.isRequired,
         deviceWidth: PropTypes.number.isRequired,
         deviceHeight: PropTypes.number.isRequired,
@@ -25,26 +27,26 @@ export default class CreateChannel extends PureComponent {
         channelType: PropTypes.string,
         closeButton: PropTypes.object,
         actions: PropTypes.shape({
-            handleCreateChannel: PropTypes.func.isRequired
-        })
+            handleCreateChannel: PropTypes.func.isRequired,
+        }),
     };
 
     static contextTypes = {
-        intl: intlShape
+        intl: intlShape,
     };
 
     static defaultProps = {
-        channelType: General.OPEN_CHANNEL
+        channelType: General.OPEN_CHANNEL,
     };
 
     leftButton = {
-        id: 'close-new-channel'
+        id: 'close-new-channel',
     };
 
     rightButton = {
         id: 'create-channel',
-        disabled: true,
-        showAsAction: 'always'
+        enabled: false,
+        showAsAction: 'always',
     };
 
     constructor(props, context) {
@@ -55,36 +57,23 @@ export default class CreateChannel extends PureComponent {
             creating: false,
             displayName: '',
             purpose: '',
-            header: ''
+            header: '',
         };
 
-        this.rightButton.title = context.intl.formatMessage({id: 'mobile.create_channel', defaultMessage: 'Create'});
+        this.rightButton.text = context.intl.formatMessage({id: 'mobile.create_channel', defaultMessage: 'Create'});
+        this.rightButton.color = props.theme.sidebarHeaderTextColor;
 
-        if (props.channelType === General.PRIVATE_CHANNEL) {
+        if (props.closeButton) {
             this.left = {...this.leftButton, icon: props.closeButton};
         }
-
-        const buttons = {
-            rightButtons: [this.rightButton]
-        };
-
-        if (this.left) {
-            buttons.leftButtons = [this.left];
-        }
-
-        props.navigator.setOnNavigatorEvent(this.onNavigatorEvent);
-        props.navigator.setButtons(buttons);
     }
 
     componentDidMount() {
+        this.navigationEventListener = Navigation.events().bindComponent(this);
         this.emitCanCreateChannel(false);
     }
 
     componentWillReceiveProps(nextProps) {
-        if (this.props.theme !== nextProps.theme) {
-            setNavigatorStyles(this.props.navigator, nextProps.theme);
-        }
-
         const {createChannelRequest} = nextProps;
 
         if (this.props.createChannelRequest !== createChannelRequest) {
@@ -94,7 +83,7 @@ export default class CreateChannel extends PureComponent {
                 this.setState({error: null, creating: true});
                 break;
             case RequestStatus.SUCCESS:
-                EventEmitter.emit('close_channel_drawer');
+                EventEmitter.emit(NavigationTypes.CLOSE_MAIN_SIDEBAR);
                 InteractionManager.runAfterInteractions(() => {
                     this.emitCreating(false);
                     this.setState({error: null, creating: false});
@@ -109,58 +98,55 @@ export default class CreateChannel extends PureComponent {
         }
     }
 
+    navigationButtonPressed({buttonId}) {
+        switch (buttonId) {
+        case 'close-new-channel':
+            this.close(!this.props.closeButton);
+            break;
+        case 'create-channel':
+            this.onCreateChannel();
+            break;
+        }
+    }
+
     close = (goBack = false) => {
-        EventEmitter.emit('closing-create-channel', false);
         if (goBack) {
-            this.props.navigator.pop({animated: true});
+            popTopScreen();
         } else {
-            this.props.navigator.dismissModal({
-                animationType: 'slide-down'
-            });
+            dismissModal();
         }
     };
 
     emitCanCreateChannel = (enabled) => {
+        const {componentId} = this.props;
         const buttons = {
-            rightButtons: [{...this.rightButton, disabled: !enabled}]
+            rightButtons: [{...this.rightButton, enabled}],
         };
 
         if (this.left) {
             buttons.leftButtons = [this.left];
         }
 
-        this.props.navigator.setButtons(buttons);
+        setButtons(componentId, buttons);
     };
 
     emitCreating = (loading) => {
+        const {componentId} = this.props;
         const buttons = {
-            rightButtons: [{...this.rightButton, disabled: loading}]
+            rightButtons: [{...this.rightButton, enabled: !loading}],
         };
 
         if (this.left) {
             buttons.leftButtons = [this.left];
         }
 
-        this.props.navigator.setButtons(buttons);
+        setButtons(componentId, buttons);
     };
 
     onCreateChannel = () => {
         Keyboard.dismiss();
         const {displayName, purpose, header} = this.state;
         this.props.actions.handleCreateChannel(displayName, purpose, header, this.props.channelType);
-    };
-
-    onNavigatorEvent = (event) => {
-        if (event.type === 'NavBarButtonPress') {
-            switch (event.id) {
-            case 'close-new-channel':
-                this.close(this.props.channelType === General.OPEN_CHANNEL);
-                break;
-            case 'create-channel':
-                this.onCreateChannel();
-                break;
-            }
-        }
     };
 
     onDisplayNameChange = (displayName) => {
@@ -177,22 +163,20 @@ export default class CreateChannel extends PureComponent {
 
     render() {
         const {
-            navigator,
             theme,
             deviceWidth,
-            deviceHeight
+            deviceHeight,
         } = this.props;
         const {
             error,
             creating,
             displayName,
             purpose,
-            header
+            header,
         } = this.state;
 
         return (
             <EditChannelInfo
-                navigator={navigator}
                 theme={theme}
                 enableRightButton={this.emitCanCreateChannel}
                 error={error}

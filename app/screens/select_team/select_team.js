@@ -1,74 +1,105 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {
     Alert,
-    FlatList,
     InteractionManager,
-    StyleSheet,
     Text,
     TouchableOpacity,
-    View
+    View,
 } from 'react-native';
+import {Navigation} from 'react-native-navigation';
 
-import {RequestStatus} from 'mattermost-redux/constants';
-import EventEmitter from 'mattermost-redux/utils/event_emitter';
+import {RequestStatus} from '@mm-redux/constants';
+import EventEmitter from '@mm-redux/utils/event_emitter';
+import {isMinimumServerVersion} from '@mm-redux/utils/helpers';
 
 import FormattedText from 'app/components/formatted_text';
 import Loading from 'app/components/loading';
 import StatusBar from 'app/components/status_bar';
-import {ListTypes} from 'app/constants';
+import CustomList from 'app/components/custom_list';
+import {paddingHorizontal as padding} from 'app/components/safe_area_view/iphone_x_spacing';
+import TeamIcon from 'app/components/team_icon';
+import {NavigationTypes} from 'app/constants';
+import {resetToChannel, dismissModal} from 'app/actions/navigation';
 import {preventDoubleTap} from 'app/utils/tap';
-import {changeOpacity, makeStyleSheetFromTheme, setNavigatorStyles} from 'app/utils/theme';
+import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
+import {t} from 'app/utils/i18n';
 
-const VIEWABILITY_CONFIG = ListTypes.VISIBILITY_CONFIG_DEFAULTS;
+const TEAMS_PER_PAGE = 50;
 
 export default class SelectTeam extends PureComponent {
     static propTypes = {
         actions: PropTypes.shape({
+            getTeams: PropTypes.func.isRequired,
             handleTeamChange: PropTypes.func.isRequired,
             joinTeam: PropTypes.func.isRequired,
+            addUserToTeam: PropTypes.func.isRequired,
             logout: PropTypes.func.isRequired,
-            markChannelAsRead: PropTypes.func.isRequired
         }).isRequired,
-        currentChannelId: PropTypes.string,
         currentUrl: PropTypes.string.isRequired,
-        joinTeamRequest: PropTypes.object.isRequired,
-        navigator: PropTypes.object,
+        currentUserIsGuest: PropTypes.bool.isRequired,
+        currentUserId: PropTypes.string.isRequired,
         userWithoutTeams: PropTypes.bool,
         teams: PropTypes.array.isRequired,
-        theme: PropTypes.object
+        theme: PropTypes.object,
+        teamsRequest: PropTypes.object.isRequired,
+        isLandscape: PropTypes.bool.isRequired,
+        serverVersion: PropTypes.string,
+    };
+
+    static defaultProps = {
+        teams: [],
     };
 
     constructor(props) {
         super(props);
-        props.navigator.setOnNavigatorEvent(this.onNavigatorEvent);
 
         this.state = {
+            loading: false,
             joining: false,
-            teams: null
+            teams: [],
+            page: 0,
+            refreshing: false,
         };
     }
 
     componentDidMount() {
-        this.buildData(this.props);
+        this.navigationEventListener = Navigation.events().bindComponent(this);
+
+        this.getTeams();
     }
 
     componentWillReceiveProps(nextProps) {
-        if (this.props.theme !== nextProps.theme) {
-            setNavigatorStyles(this.props.navigator, nextProps.theme);
-        }
-
         if (this.props.teams !== nextProps.teams) {
             this.buildData(nextProps);
         }
+    }
 
-        if (this.props.joinTeamRequest.status !== RequestStatus.FAILURE &&
-            nextProps.joinTeamRequest.status === RequestStatus.FAILURE) {
-            Alert.alert('', nextProps.joinTeamRequest.error.message);
+    navigationButtonPressed({buttonId}) {
+        const {logout} = this.props.actions;
+
+        switch (buttonId) {
+        case 'close-teams':
+            this.close();
+            break;
+        case 'logout':
+            InteractionManager.runAfterInteractions(logout);
+            break;
         }
+    }
+
+    getTeams = () => {
+        this.setState({loading: true});
+        this.props.actions.getTeams(this.state.page, TEAMS_PER_PAGE).then(() => {
+            this.setState((state) => ({
+                loading: false,
+                refreshing: false,
+                page: state.page + 1,
+            }));
+        });
     }
 
     buildData = (props) => {
@@ -76,64 +107,44 @@ export default class SelectTeam extends PureComponent {
             this.setState({teams: props.teams});
         } else {
             const teams = [{
-                id: 'mobile.select_team.no_teams',
-                defaultMessage: 'There are no available teams for you to join.'
+                id: t('mobile.select_team.no_teams'),
+                defaultMessage: 'There are no available teams for you to join.',
             }];
             this.setState({teams});
         }
     };
 
     close = () => {
-        this.props.navigator.dismissModal({
-            animationType: 'slide-down'
-        });
+        dismissModal();
     };
 
     goToChannelView = () => {
-        const {navigator, theme} = this.props;
+        const passProps = {
+            disableTermsModal: true,
+        };
 
-        navigator.resetTo({
-            screen: 'Channel',
-            animated: false,
-            navigatorStyle: {
-                navBarHidden: true,
-                statusBarHidden: false,
-                statusBarHideWithNavBar: false,
-                screenBackgroundColor: theme.centerChannelBg
-            }
-        });
-    };
-
-    onNavigatorEvent = (event) => {
-        if (event.type === 'NavBarButtonPress') {
-            const {logout} = this.props.actions;
-
-            switch (event.id) {
-            case 'close-teams':
-                this.close();
-                break;
-            case 'logout':
-                InteractionManager.runAfterInteractions(logout);
-                break;
-            }
-        }
+        resetToChannel(passProps);
     };
 
     onSelectTeam = async (team) => {
         this.setState({joining: true});
-        const {currentChannelId, userWithoutTeams} = this.props;
+        const {userWithoutTeams, currentUserId, serverVersion} = this.props;
         const {
             joinTeam,
+            addUserToTeam,
             handleTeamChange,
-            markChannelAsRead
         } = this.props.actions;
 
-        if (currentChannelId) {
-            markChannelAsRead(currentChannelId);
+        let error;
+        if (isMinimumServerVersion(serverVersion, 5, 18)) {
+            const result = await addUserToTeam(team.id, currentUserId);
+            error = result.error;
+        } else {
+            const result = await joinTeam(team.invite_id, team.id);
+            error = result.error;
         }
-
-        const success = await joinTeam(team.invite_id, team.id);
-        if (!success) {
+        if (error) {
+            Alert.alert(error.message);
             this.setState({joining: false});
             return;
         }
@@ -143,25 +154,31 @@ export default class SelectTeam extends PureComponent {
         if (userWithoutTeams) {
             this.goToChannelView();
         } else {
-            EventEmitter.emit('close_channel_drawer');
+            EventEmitter.emit(NavigationTypes.CLOSE_MAIN_SIDEBAR);
             InteractionManager.runAfterInteractions(() => {
                 this.close();
             });
         }
     };
 
+    onRefresh = () => {
+        this.setState({page: 0, refreshing: true}, () => {
+            this.getTeams();
+        });
+    }
+
     renderItem = ({item}) => {
-        const {currentUrl, theme} = this.props;
-        const styles = getStyleSheet(theme);
+        const {currentUrl, theme, isLandscape} = this.props;
+        const style = getStyleFromTheme(theme);
 
         if (item.id === 'mobile.select_team.no_teams') {
             return (
-                <View style={styles.teamWrapper}>
-                    <View style={styles.teamContainer}>
+                <View style={style.teamWrapper}>
+                    <View style={style.teamContainer}>
                         <FormattedText
                             id={item.id}
                             defaultMessage={item.defaultMessage}
-                            style={styles.noTeam}
+                            style={style.noTeam}
                         />
                     </View>
                 </View>
@@ -169,28 +186,29 @@ export default class SelectTeam extends PureComponent {
         }
 
         return (
-            <View style={styles.teamWrapper}>
+            <View style={[style.teamWrapper, padding(isLandscape)]}>
                 <TouchableOpacity
-                    onPress={() => preventDoubleTap(this.onSelectTeam, this, item)}
+                    onPress={preventDoubleTap(() => this.onSelectTeam(item))}
                 >
-                    <View style={styles.teamContainer}>
-                        <View style={styles.teamIconContainer}>
-                            <Text style={styles.teamIcon}>
-                                {item.display_name.substr(0, 2).toUpperCase()}
-                            </Text>
-                        </View>
-                        <View style={styles.teamNameContainer}>
+                    <View style={style.teamContainer}>
+                        <TeamIcon
+                            teamId={item.id}
+                            styleContainer={style.teamIconContainer}
+                            styleText={style.teamIconText}
+                            styleImage={style.imageContainer}
+                        />
+                        <View style={style.teamNameContainer}>
                             <Text
                                 numberOfLines={1}
                                 ellipsizeMode='tail'
-                                style={styles.teamName}
+                                style={style.teamName}
                             >
                                 {item.display_name}
                             </Text>
                             <Text
                                 numberOfLines={1}
                                 ellipsizeMode='tail'
-                                style={styles.teamUrl}
+                                style={style.teamUrl}
                             >
                                 {`${currentUrl}/${item.name}`}
                             </Text>
@@ -202,101 +220,140 @@ export default class SelectTeam extends PureComponent {
     };
 
     render() {
-        const {theme} = this.props;
+        const {theme, isLandscape} = this.props;
         const {teams} = this.state;
-        const styles = getStyleSheet(theme);
+        const style = getStyleFromTheme(theme);
 
         if (this.state.joining) {
-            return <Loading/>;
+            return <Loading color={theme.centerChannelColor}/>;
+        }
+
+        if (this.props.teamsRequest.status === RequestStatus.FAILURE) {
+            const FailedNetworkAction = require('app/components/failed_network_action').default;
+
+            return (
+                <FailedNetworkAction
+                    onRetry={this.getTeams}
+                    theme={theme}
+                />
+            );
+        }
+
+        if (this.props.currentUserIsGuest) {
+            return (
+                <View style={style.container}>
+                    <StatusBar/>
+                    <View style={style.headingContainer}>
+                        <FormattedText
+                            id='mobile.select_team.guest_cant_join_team'
+                            defaultMessage='Your guest account has no teams or channels assigned. Please contact an administrator.'
+                            style={style.heading}
+                        />
+                    </View>
+                </View>
+            );
         }
 
         return (
-            <View style={styles.container}>
+            <View style={style.container}>
                 <StatusBar/>
-                <View style={styles.headingContainer}>
-                    <View style={styles.headingWrapper}>
+                <View style={style.headingContainer}>
+                    <View style={[style.headingWrapper, padding(isLandscape)]}>
                         <FormattedText
                             id='mobile.select_team.join_open'
                             defaultMessage='Open teams you can join'
-                            style={styles.heading}
+                            style={style.heading}
                         />
                     </View>
-                    <View style={styles.line}/>
+                    <View style={style.line}/>
                 </View>
-                <FlatList
+                <CustomList
                     data={teams}
+                    loading={this.state.loading}
+                    loadingComponent={
+                        <View style={style.footer}>
+                            <Loading
+                                color={theme.centerChannelColor}
+                                size='small'
+                            />
+                        </View>
+                    }
+                    refreshing={this.state.refreshing}
+                    onRefresh={this.onRefresh}
+                    onLoadMore={this.getTeams}
                     renderItem={this.renderItem}
-                    keyExtractor={(item) => item.id}
-                    viewabilityConfig={VIEWABILITY_CONFIG}
+                    theme={theme}
+                    extraData={this.state.loading}
+                    shouldRenderSeparator={false}
                 />
             </View>
         );
     }
 }
 
-const getStyleSheet = makeStyleSheetFromTheme((theme) => {
+const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
     return {
         container: {
-            backgroundColor: theme.centerChannelBg,
-            flex: 1
+            flex: 1,
         },
         headingContainer: {
             alignItems: 'center',
             flexDirection: 'row',
             marginHorizontal: 16,
-            marginTop: 20
+            marginTop: 20,
         },
         headingWrapper: {
-            marginRight: 15
+            marginRight: 15,
         },
         heading: {
             color: changeOpacity(theme.centerChannelColor, 0.5),
-            fontSize: 13
+            fontSize: 13,
         },
         line: {
             backgroundColor: changeOpacity(theme.centerChannelColor, 0.2),
             width: '100%',
-            height: StyleSheet.hairlineWidth
+            height: 1,
+        },
+        footer: {
+            marginVertical: 10,
         },
         teamWrapper: {
-            marginTop: 20
+            marginTop: 20,
         },
         teamContainer: {
             alignItems: 'center',
             flex: 1,
             flexDirection: 'row',
-            marginHorizontal: 16
+            marginHorizontal: 16,
         },
         teamIconContainer: {
-            alignItems: 'center',
-            backgroundColor: theme.buttonBg,
-            borderRadius: 2,
+            width: 40,
             height: 40,
-            justifyContent: 'center',
-            width: 40
+            backgroundColor: theme.sidebarBg,
+        },
+        teamIconText: {
+            color: theme.sidebarText,
+            fontSize: 18,
+        },
+        imageContainer: {
+            backgroundColor: '#FFF',
         },
         noTeam: {
             color: theme.centerChannelColor,
-            fontSize: 14
-        },
-        teamIcon: {
-            color: theme.buttonColor,
-            fontFamily: 'OpenSans',
-            fontSize: 18,
-            fontWeight: '600'
+            fontSize: 14,
         },
         teamNameContainer: {
             flex: 1,
             flexDirection: 'column',
-            marginLeft: 10
+            marginLeft: 10,
         },
         teamName: {
             color: theme.centerChannelColor,
-            fontSize: 18
+            fontSize: 18,
         },
         teamUrl: {
             color: changeOpacity(theme.centerChannelColor, 0.5),
-            fontSize: 12
-        }
+            fontSize: 12,
+        },
     };
 });

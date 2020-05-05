@@ -1,71 +1,113 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React, {PureComponent} from 'react';
 import PropTypes from 'prop-types';
 import {intlShape} from 'react-intl';
-import {View} from 'react-native';
-
+import {Alert, View} from 'react-native';
+import RNFetchBlob from 'rn-fetch-blob';
 import {KeyboardAwareScrollView} from 'react-native-keyboard-aware-scroll-view';
+import DocumentPicker from 'react-native-document-picker';
+import {Navigation} from 'react-native-navigation';
 
+import {Client4} from '@mm-redux/client';
+import {getFormattedFileSize} from '@mm-redux/utils/file_utils';
+
+import {buildFileUploadData, encodeHeaderURIStringToUTF8} from 'app/utils/file';
+import {emptyFunction} from 'app/utils/general';
+import {preventDoubleTap} from 'app/utils/tap';
+import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
+import {t} from 'app/utils/i18n';
+
+import TextSetting from 'app/components/widgets/settings/text_setting';
 import Loading from 'app/components/loading';
 import ErrorText from 'app/components/error_text';
 import StatusBar from 'app/components/status_bar/index';
-import ProfilePicture from 'app/components/profile_picture/index';
-import AttachmentButton from 'app/components/attachment_button';
-import {emptyFunction} from 'app/utils/general';
-import {wrapWithPreventDoubleTap} from 'app/utils/tap';
-import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
+import ProfilePictureButton from 'app/components/profile_picture_button';
+import ProfilePicture from 'app/components/profile_picture';
+import mattermostBucket from 'app/mattermost_bucket';
+import {popTopScreen, dismissModal, setButtons} from 'app/actions/navigation';
 
-import EditProfileItem from './edit_profile_item';
-
+const MAX_SIZE = 20 * 1024 * 1024;
+export const VALID_MIME_TYPES = [
+    'image/jpeg',
+    'image/jpeg',
+    'image/jpg',
+    'image/jp_',
+    'application/jpg',
+    'application/x-jpg',
+    'image/pjpeg',
+    'image/pipeg',
+    'image/vnd.swiftview-jpeg',
+    'image/x-xbitmap',
+    'image/png',
+    'application/png',
+    'application/x-png',
+    'image/bmp',
+    'image/x-bmp',
+    'image/x-bitmap',
+    'image/x-xbitmap',
+    'image/x-win-bitmap',
+    'image/x-windows-bmp',
+    'image/ms-bmp',
+    'image/x-ms-bmp',
+    'application/bmp',
+    'application/x-bmp',
+    'application/x-win-bitmap',
+];
 const holders = {
     firstName: {
-        id: 'user.settings.general.firstName',
-        defaultMessage: 'First Name'
+        id: t('user.settings.general.firstName'),
+        defaultMessage: 'First Name',
     },
     lastName: {
-        id: 'user.settings.general.lastName',
-        defaultMessage: 'Last Name'
+        id: t('user.settings.general.lastName'),
+        defaultMessage: 'Last Name',
     },
     username: {
-        id: 'user.settings.general.username',
-        defaultMessage: 'Username'
+        id: t('user.settings.general.username'),
+        defaultMessage: 'Username',
     },
     nickname: {
-        id: 'user.settings.general.nickname',
-        defaultMessage: 'Nickname'
+        id: t('user.settings.general.nickname'),
+        defaultMessage: 'Nickname',
     },
     position: {
-        id: 'user.settings.general.position',
-        defaultMessage: 'Position'
+        id: t('user.settings.general.position'),
+        defaultMessage: 'Position',
     },
     email: {
-        id: 'user.settings.general.email',
-        defaultMessage: 'Email'
-    }
+        id: t('user.settings.general.email'),
+        defaultMessage: 'Email',
+    },
 };
 
 export default class EditProfile extends PureComponent {
     static propTypes = {
         actions: PropTypes.shape({
-            handleUploadProfileImage: PropTypes.func.isRequired,
-            updateUser: PropTypes.func.isRequired
+            setProfileImageUri: PropTypes.func.isRequired,
+            removeProfileImage: PropTypes.func.isRequired,
+            updateUser: PropTypes.func.isRequired,
         }).isRequired,
-        config: PropTypes.object.isRequired,
+        componentId: PropTypes.string,
         currentUser: PropTypes.object.isRequired,
-        navigator: PropTypes.object.isRequired,
-        theme: PropTypes.object.isRequired
+        firstNameDisabled: PropTypes.bool.isRequired,
+        lastNameDisabled: PropTypes.bool.isRequired,
+        nicknameDisabled: PropTypes.bool.isRequired,
+        positionDisabled: PropTypes.bool.isRequired,
+        theme: PropTypes.object.isRequired,
+        commandType: PropTypes.string.isRequired,
+        isLandscape: PropTypes.bool.isRequired,
     };
 
     static contextTypes = {
-        intl: intlShape
+        intl: intlShape,
     };
 
     rightButton = {
         id: 'update-profile',
-        disabled: true,
-        showAsAction: 'always'
+        enabled: false,
+        showAsAction: 'always',
     };
 
     constructor(props, context) {
@@ -73,12 +115,12 @@ export default class EditProfile extends PureComponent {
 
         const {email, first_name: firstName, last_name: lastName, nickname, position, username} = props.currentUser;
         const buttons = {
-            rightButtons: [this.rightButton]
+            rightButtons: [this.rightButton],
         };
+        this.rightButton.color = props.theme.sidebarHeaderTextColor;
+        this.rightButton.text = context.intl.formatMessage({id: t('mobile.account.settings.save'), defaultMessage: 'Save'});
 
-        this.rightButton.title = context.intl.formatMessage({id: 'mobile.account.settings.save', defaultMessage: 'Save'});
-        props.navigator.setOnNavigatorEvent(this.onNavigatorEvent);
-        props.navigator.setButtons(buttons);
+        setButtons(props.componentId, buttons);
 
         this.state = {
             email,
@@ -86,8 +128,23 @@ export default class EditProfile extends PureComponent {
             lastName,
             nickname,
             position,
-            username
+            username,
         };
+    }
+
+    componentDidMount() {
+        this.navigationEventListener = Navigation.events().bindComponent(this);
+    }
+
+    navigationButtonPressed({buttonId}) {
+        switch (buttonId) {
+        case 'update-profile':
+            this.submitUser();
+            break;
+        case 'close-settings':
+            this.close();
+            break;
+        }
     }
 
     canUpdate = (updatedField) => {
@@ -121,17 +178,21 @@ export default class EditProfile extends PureComponent {
     };
 
     close = () => {
-        this.props.navigator.dismissModal({
-            animationType: 'slide-down'
-        });
+        const {commandType} = this.props;
+        if (commandType === 'Push') {
+            popTopScreen();
+        } else {
+            dismissModal();
+        }
     };
 
     emitCanUpdateAccount = (enabled) => {
+        const {componentId} = this.props;
         const buttons = {
-            rightButtons: [{...this.rightButton, disabled: !enabled}]
+            rightButtons: [{...this.rightButton, enabled}],
         };
 
-        this.props.navigator.setButtons(buttons);
+        setButtons(componentId, buttons);
     };
 
     handleRequestError = (error) => {
@@ -142,18 +203,19 @@ export default class EditProfile extends PureComponent {
         }
     };
 
-    submitUser = wrapWithPreventDoubleTap(async () => {
+    submitUser = preventDoubleTap(async () => {
         this.emitCanUpdateAccount(false);
         this.setState({error: null, updating: true});
 
         const {
             profileImage,
+            profileImageRemove,
             firstName,
             lastName,
             username,
             nickname,
             position,
-            email
+            email,
         } = this.state;
         const user = {
             first_name: firstName,
@@ -161,19 +223,21 @@ export default class EditProfile extends PureComponent {
             username,
             nickname,
             position,
-            email
+            email,
         };
+        const {actions, currentUser} = this.props;
 
         if (profileImage) {
-            const {error} = await this.props.actions.handleUploadProfileImage(profileImage, this.props.currentUser.id);
-            if (error) {
-                this.handleRequestError(error);
-                return;
-            }
+            actions.setProfileImageUri(profileImage.uri);
+            this.uploadProfileImage().catch(this.handleUploadError);
+        }
+
+        if (profileImageRemove) {
+            actions.removeProfileImage(currentUser.id);
         }
 
         if (this.canUpdate()) {
-            const {error} = await this.props.actions.updateUser(user);
+            const {error} = await actions.updateUser(user);
             if (error) {
                 this.handleRequestError(error);
                 return;
@@ -189,72 +253,110 @@ export default class EditProfile extends PureComponent {
         this.emitCanUpdateAccount(true);
     };
 
-    updateField = (field) => {
+    handleRemoveProfileImage = () => {
+        this.setState({profileImageRemove: true});
+        this.emitCanUpdateAccount(true);
+    };
+
+    uploadProfileImage = async () => {
+        const {profileImage} = this.state;
+        const {currentUser} = this.props;
+        const fileData = buildFileUploadData(profileImage);
+
+        const headers = {
+            Authorization: `Bearer ${Client4.getToken()}`,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'multipart/form-data',
+            'X-CSRF-Token': Client4.csrf,
+        };
+
+        const fileInfo = {
+            name: 'image',
+            filename: encodeHeaderURIStringToUTF8(fileData.name),
+            data: RNFetchBlob.wrap(profileImage.uri.replace('file://', '')),
+            type: fileData.type,
+        };
+
+        const certificate = await mattermostBucket.getPreference('cert');
+        const options = {
+            timeout: 10000,
+            certificate,
+        };
+
+        return RNFetchBlob.config(options).fetch('POST', `${Client4.getUserRoute(currentUser.id)}/image`, headers, [fileInfo]);
+    };
+
+    updateField = (id, name) => {
+        const field = {[id]: name};
         this.setState(field, () => {
             this.emitCanUpdateAccount(this.canUpdate(field));
         });
     };
 
-    onNavigatorEvent = (event) => {
-        if (event.type === 'NavBarButtonPress') {
-            switch (event.id) {
-            case 'update-profile':
-                this.submitUser();
-                break;
-            case 'close-settings':
-                this.close();
-                break;
-            }
-        }
+    onShowFileSizeWarning = (filename) => {
+        const {formatMessage} = this.context.intl;
+        const fileSizeWarning = formatMessage({
+            id: 'file_upload.fileAbove',
+            defaultMessage: 'File above {max}MB cannot be uploaded: {filename}',
+        }, {
+            max: getFormattedFileSize({size: MAX_SIZE}),
+            filename,
+        });
+
+        Alert.alert(fileSizeWarning);
+    };
+
+    onShowUnsupportedMimeTypeWarning = () => {
+        const {formatMessage} = this.context.intl;
+        const fileTypeWarning = formatMessage({
+            id: 'mobile.file_upload.unsupportedMimeType',
+            defaultMessage: 'Only BMP, JPG or PNG images may be used for profile pictures.',
+        });
+
+        Alert.alert('', fileTypeWarning);
     };
 
     renderFirstNameSettings = () => {
         const {formatMessage} = this.context.intl;
-        const {config, currentUser, theme} = this.props;
+        const {firstNameDisabled, theme, isLandscape} = this.props;
         const {firstName} = this.state;
 
-        const {auth_service: service} = currentUser;
-        const disabled = (service === 'ldap' && config.LdapFristNameAttributeSet === 'true') ||
-            (service === 'saml' && config.SamlFirstNameAttributeSet === 'true');
-
         return (
-            <EditProfileItem
-                disabled={disabled}
-                field='firstName'
-                format={holders.firstName}
-                helpText={formatMessage({
+            <TextSetting
+                disabled={firstNameDisabled}
+                id='firstName'
+                label={holders.firstName}
+                disabledText={formatMessage({
                     id: 'user.settings.general.field_handled_externally',
-                    defaultMessage: 'This field is handled through your login provider. If you want to change it, you need to do so through your login provider.'
+                    defaultMessage: 'This field is handled through your login provider. If you want to change it, you need to do so through your login provider.',
                 })}
-                updateValue={this.updateField}
+                onChange={this.updateField}
                 theme={theme}
                 value={firstName}
+                isLandscape={isLandscape}
             />
         );
     };
 
     renderLastNameSettings = () => {
         const {formatMessage} = this.context.intl;
-        const {config, currentUser, theme} = this.props;
+        const {lastNameDisabled, theme, isLandscape} = this.props;
         const {lastName} = this.state;
-
-        const {auth_service: service} = currentUser;
-        const disabled = (service === 'ldap' && config.LdapLastNameAttributeSet === 'true') ||
-            (service === 'saml' && config.SamlLastNameAttributeSet === 'true');
 
         return (
             <View>
-                <EditProfileItem
-                    disabled={disabled}
-                    field='lastName'
-                    format={holders.lastName}
-                    helpText={formatMessage({
+                <TextSetting
+                    disabled={lastNameDisabled}
+                    id='lastName'
+                    label={holders.lastName}
+                    disabledText={formatMessage({
                         id: 'user.settings.general.field_handled_externally',
-                        defaultMessage: 'This field is handled through your login provider. If you want to change it, you need to do so through your login provider.'
+                        defaultMessage: 'This field is handled through your login provider. If you want to change it, you need to do so through your login provider.',
                     })}
-                    updateValue={this.updateField}
+                    onChange={this.updateField}
                     theme={theme}
                     value={lastName}
+                    isLandscape={isLandscape}
                 />
             </View>
         );
@@ -262,72 +364,70 @@ export default class EditProfile extends PureComponent {
 
     renderUsernameSettings = () => {
         const {formatMessage} = this.context.intl;
-        const {currentUser, theme} = this.props;
+        const {currentUser, theme, isLandscape} = this.props;
         const {username} = this.state;
         const disabled = currentUser.auth_service !== '';
 
         return (
-            <EditProfileItem
+            <TextSetting
                 disabled={disabled}
-                field='username'
-                format={holders.username}
-                helpText={formatMessage({
+                id='username'
+                label={holders.username}
+                disabledText={formatMessage({
                     id: 'user.settings.general.field_handled_externally',
-                    defaultMessage: 'This field is handled through your login provider. If you want to change it, you need to do so through your login provider.'
+                    defaultMessage: 'This field is handled through your login provider. If you want to change it, you need to do so through your login provider.',
                 })}
-                updateValue={this.updateField}
+                maxLength={22}
+                onChange={this.updateField}
                 theme={theme}
                 value={username}
+                isLandscape={isLandscape}
             />
         );
     };
 
     renderEmailSettings = () => {
         const {formatMessage} = this.context.intl;
-        const {config, currentUser, theme} = this.props;
+        const {currentUser, theme, isLandscape} = this.props;
         const {email} = this.state;
 
         let helpText;
-        let disabled = false;
 
-        if (config.SendEmailNotifications !== 'true') {
-            disabled = true;
+        if (currentUser.auth_service === '') {
             helpText = formatMessage({
-                id: 'user.settings.general.emailHelp1',
-                defaultMessage: 'Email is used for sign-in, notifications, and password reset. Email requires verification if changed.'
+                id: 'user.settings.general.emailCantUpdate',
+                defaultMessage: 'Email must be updated using a web client or desktop application.',
             });
-        } else if (currentUser.auth_service !== '') {
-            disabled = true;
-
+        } else {
             switch (currentUser.auth_service) {
             case 'gitlab':
                 helpText = formatMessage({
                     id: 'user.settings.general.emailGitlabCantUpdate',
-                    defaultMessage: 'Login occurs through GitLab. Email cannot be updated. Email address used for notifications is {email}.'
+                    defaultMessage: 'Login occurs through GitLab. Email cannot be updated. Email address used for notifications is {email}.',
                 }, {email});
                 break;
             case 'google':
                 helpText = formatMessage({
                     id: 'user.settings.general.emailGoogleCantUpdate',
-                    defaultMessage: 'Login occurs through Google Apps. Email cannot be updated. Email address used for notifications is {email}.'
+                    defaultMessage: 'Login occurs through Google Apps. Email cannot be updated. Email address used for notifications is {email}.',
                 }, {email});
                 break;
             case 'office365':
                 helpText = formatMessage({
                     id: 'user.settings.general.emailOffice365CantUpdate',
-                    defaultMessage: 'Login occurs through Office 365. Email cannot be updated. Email address used for notifications is {email}.'
+                    defaultMessage: 'Login occurs through Office 365. Email cannot be updated. Email address used for notifications is {email}.',
                 }, {email});
                 break;
             case 'ldap':
                 helpText = formatMessage({
                     id: 'user.settings.general.emailLdapCantUpdate',
-                    defaultMessage: 'Login occurs through AD/LDAP. Email cannot be updated. Email address used for notifications is {email}.'
+                    defaultMessage: 'Login occurs through AD/LDAP. Email cannot be updated. Email address used for notifications is {email}.',
                 }, {email});
                 break;
             case 'saml':
                 helpText = formatMessage({
                     id: 'user.settings.general.emailSamlCantUpdate',
-                    defaultMessage: 'Login occurs through SAML. Email cannot be updated. Email address used for notifications is {email}.'
+                    defaultMessage: 'Login occurs through SAML. Email cannot be updated. Email address used for notifications is {email}.',
                 }, {email});
                 break;
             }
@@ -335,14 +435,15 @@ export default class EditProfile extends PureComponent {
 
         return (
             <View>
-                <EditProfileItem
-                    disabled={disabled}
-                    field='email'
-                    format={holders.email}
-                    helpText={helpText}
-                    updateValue={this.updateField}
+                <TextSetting
+                    disabled={true}
+                    id='email'
+                    label={holders.email}
+                    disabledText={helpText}
+                    onChange={this.updateField}
                     theme={theme}
                     value={email}
+                    isLandscape={isLandscape}
                 />
             </View>
         );
@@ -350,49 +451,48 @@ export default class EditProfile extends PureComponent {
 
     renderNicknameSettings = () => {
         const {formatMessage} = this.context.intl;
-        const {config, currentUser, theme} = this.props;
+        const {nicknameDisabled, theme, isLandscape} = this.props;
         const {nickname} = this.state;
 
-        const {auth_service: service} = currentUser;
-        const disabled = (service === 'ldap' && config.LdapNicknameAttributeSet === 'true') ||
-            (service === 'saml' && config.SamlNicknameAttributeSet === 'true');
-
         return (
-            <EditProfileItem
-                disabled={disabled}
-                field='nickname'
-                format={holders.nickname}
-                helpText={formatMessage({
+            <TextSetting
+                disabled={nicknameDisabled}
+                id='nickname'
+                label={holders.nickname}
+                disabledText={formatMessage({
                     id: 'user.settings.general.field_handled_externally',
-                    defaultMessage: 'This field is handled through your login provider. If you want to change it, you need to do so through your login provider.'
+                    defaultMessage: 'This field is handled through your login provider. If you want to change it, you need to do so through your login provider.',
                 })}
-                updateValue={this.updateField}
+                maxLength={22}
+                onChange={this.updateField}
                 theme={theme}
                 value={nickname}
+                isLandscape={isLandscape}
+                optional={true}
             />
         );
     };
 
     renderPositionSettings = () => {
         const {formatMessage} = this.context.intl;
-        const {config, currentUser, theme} = this.props;
+        const {positionDisabled, theme, isLandscape} = this.props;
         const {position} = this.state;
 
-        const {auth_service: service} = currentUser;
-        const disabled = (service === 'ldap' || service === 'saml') && config.PositionAttribute === 'true';
-
         return (
-            <EditProfileItem
-                disabled={disabled}
-                field='position'
-                format={holders.position}
-                helpText={formatMessage({
+            <TextSetting
+                disabled={positionDisabled}
+                id='position'
+                label={holders.position}
+                disabledText={formatMessage({
                     id: 'user.settings.general.field_handled_externally',
-                    defaultMessage: 'This field is handled through your login provider. If you want to change it, you need to do so through your login provider.'
+                    defaultMessage: 'This field is handled through your login provider. If you want to change it, you need to do so through your login provider.',
                 })}
-                updateValue={this.updateField}
+                maxLength={128}
+                onChange={this.updateField}
                 theme={theme}
                 value={position}
+                isLandscape={isLandscape}
+                optional={true}
             />
         );
     };
@@ -401,27 +501,66 @@ export default class EditProfile extends PureComponent {
         this.scrollView = ref;
     };
 
-    render() {
+    renderProfilePicture = () => {
         const {
             currentUser,
             theme,
-            navigator
         } = this.props;
 
         const {
             profileImage,
-            error,
-            updating
+            profileImageRemove,
         } = this.state;
 
         const style = getStyleSheet(theme);
         const uri = profileImage ? profileImage.uri : null;
 
+        return (
+            <View style={style.top}>
+                <ProfilePictureButton
+                    currentUser={currentUser}
+                    theme={theme}
+                    blurTextBox={emptyFunction}
+                    browseFileTypes={DocumentPicker.types.images}
+                    canTakeVideo={false}
+                    canBrowseVideoLibrary={false}
+                    maxFileSize={MAX_SIZE}
+                    wrapper={true}
+                    uploadFiles={this.handleUploadProfileImage}
+                    removeProfileImage={this.handleRemoveProfileImage}
+                    onShowFileSizeWarning={this.onShowFileSizeWarning}
+                    onShowUnsupportedMimeTypeWarning={this.onShowUnsupportedMimeTypeWarning}
+                    validMimeTypes={VALID_MIME_TYPES}
+                >
+                    <ProfilePicture
+                        userId={currentUser.id}
+                        size={150}
+                        statusBorderWidth={6}
+                        statusSize={40}
+                        edit={true}
+                        imageUri={uri}
+                        profileImageRemove={profileImageRemove}
+                    />
+                </ProfilePictureButton>
+            </View>
+        );
+    };
+
+    render() {
+        const {theme} = this.props;
+
+        const {
+            error,
+            updating,
+        } = this.state;
+
+        const style = getStyleSheet(theme);
+
         if (updating) {
             return (
                 <View style={[style.container, style.flex]}>
                     <StatusBar/>
-                    <Loading/>
+                    <Loading color={theme.centerChannelColor}/>
                 </View>
             );
         }
@@ -446,28 +585,10 @@ export default class EditProfile extends PureComponent {
                 <KeyboardAwareScrollView
                     bounces={false}
                     innerRef={this.scrollViewRef}
-                    style={style.container}
                 >
                     {displayError}
                     <View style={[style.scrollView]}>
-                        <View style={style.top}>
-                            <AttachmentButton
-                                blurTextBox={emptyFunction}
-                                theme={theme}
-                                navigator={navigator}
-                                wrapper={true}
-                                uploadFiles={this.handleUploadProfileImage}
-                            >
-                                <ProfilePicture
-                                    userId={currentUser.id}
-                                    size={150}
-                                    statusBorderWidth={6}
-                                    statusSize={40}
-                                    edit={true}
-                                    imageUri={uri}
-                                />
-                            </AttachmentButton>
-                        </View>
+                        {this.renderProfilePicture()}
                         {this.renderFirstNameSettings()}
                         <View style={style.separator}/>
                         {this.renderLastNameSettings()}
@@ -490,39 +611,36 @@ export default class EditProfile extends PureComponent {
 const getStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
         flex: {
-            flex: 1
-        },
-        container: {
-            backgroundColor: theme.centerChannelBg
+            flex: 1,
         },
         scrollView: {
             flex: 1,
             backgroundColor: changeOpacity(theme.centerChannelColor, 0.03),
-            paddingTop: 10
+            paddingTop: 10,
         },
         top: {
             padding: 25,
             alignItems: 'center',
-            justifyContent: 'center'
+            justifyContent: 'center',
         },
         errorContainer: {
             backgroundColor: changeOpacity(theme.centerChannelColor, 0.03),
-            width: '100%'
+            width: '100%',
         },
         errorWrapper: {
             justifyContent: 'center',
-            alignItems: 'center'
+            alignItems: 'center',
         },
         errorText: {
-            fontSize: 14
+            fontSize: 14,
+            marginHorizontal: 15,
         },
         separator: {
-            height: 15
+            height: 15,
         },
         footer: {
             height: 40,
-            width: '100%'
-        }
+            width: '100%',
+        },
     };
 });
-

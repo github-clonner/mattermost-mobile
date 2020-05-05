@@ -1,11 +1,11 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
-import React from 'react';
+import React, {memo} from 'react';
 import PropTypes from 'prop-types';
 import {
     View,
-    ViewPropTypes
+    ViewPropTypes,
 } from 'react-native';
 
 import FormattedText from 'app/components/formatted_text';
@@ -46,7 +46,7 @@ function NewMessagesDivider(props) {
 NewMessagesDivider.propTypes = {
     moreMessages: PropTypes.bool,
     style: ViewPropTypes.style,
-    theme: PropTypes.object
+    theme: PropTypes.object,
 };
 
 const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
@@ -54,21 +54,21 @@ const getStyleFromTheme = makeStyleSheetFromTheme((theme) => {
         container: {
             alignItems: 'center',
             flexDirection: 'row',
-            height: 28
+            height: 28,
         },
         textContainer: {
-            marginHorizontal: 15
+            marginHorizontal: 15,
         },
         line: {
             flex: 1,
             height: 1,
-            backgroundColor: theme.newMessageSeparator
+            backgroundColor: theme.newMessageSeparator,
         },
         text: {
             fontSize: 14,
-            color: theme.newMessageSeparator
-        }
+            color: theme.newMessageSeparator,
+        },
     };
 });
 
-export default NewMessagesDivider;
+export default memo(NewMessagesDivider);

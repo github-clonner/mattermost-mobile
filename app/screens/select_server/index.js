@@ -1,21 +1,24 @@
-// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
-import {getPing, resetPing, setServerVersion} from 'mattermost-redux/actions/general';
+import {getPing, resetPing, setServerVersion} from '@mm-redux/actions/general';
+import {login} from '@mm-redux/actions/users';
+import {getConfig, getLicense} from '@mm-redux/selectors/entities/general';
 
 import {setLastUpgradeCheck} from 'app/actions/views/client_upgrade';
+import {handleSuccessfulLogin, scheduleExpiredNotification} from 'app/actions/views/login';
 import {loadConfigAndLicense} from 'app/actions/views/root';
 import {handleServerUrlChanged} from 'app/actions/views/select_server';
 import getClientUpgrade from 'app/selectors/client_upgrade';
-import {getTheme} from 'mattermost-redux/selectors/entities/preferences';
 
 import SelectServer from './select_server';
 
 function mapStateToProps(state) {
-    const {config, license} = state.entities.general;
+    const config = getConfig(state);
+    const license = getLicense(state);
     const {currentVersion, latestVersion, minVersion} = getClientUpgrade(state);
 
     return {
@@ -26,20 +29,22 @@ function mapStateToProps(state) {
         latestVersion,
         license,
         minVersion,
-        theme: getTheme(state)
     };
 }
 
 function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
+            handleSuccessfulLogin,
             getPing,
+            scheduleExpiredNotification,
             handleServerUrlChanged,
             loadConfigAndLicense,
+            login,
             resetPing,
             setLastUpgradeCheck,
-            setServerVersion
-        }, dispatch)
+            setServerVersion,
+        }, dispatch),
     };
 }
 

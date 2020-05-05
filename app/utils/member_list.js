@@ -1,25 +1,40 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
+import {t} from 'app/utils/i18n';
 
 export const loadingText = {
-    id: 'mobile.loading_members',
-    defaultMessage: 'Loading Members...'
+    id: t('mobile.loading_members'),
+    defaultMessage: 'Loading Members...',
 };
 
-export function createMembersSections(data) {
+const sectionKeyExtractor = (profile) => {
+    // Group items alphabetically by first letter of username
+    return profile.username[0].toUpperCase();
+};
+
+export function createProfilesSections(profiles) {
     const sections = {};
-    data.forEach((d) => {
-        const name = d.username;
-        const sectionKey = name.substring(0, 1).toUpperCase();
+    const sectionKeys = [];
+    for (const profile of profiles) {
+        const sectionKey = sectionKeyExtractor(profile);
 
         if (!sections[sectionKey]) {
             sections[sectionKey] = [];
+            sectionKeys.push(sectionKey);
         }
 
-        sections[sectionKey].push(d);
-    });
+        sections[sectionKey].push(profile);
+    }
 
-    return sections;
+    sectionKeys.sort();
+
+    return sectionKeys.map((sectionKey) => {
+        return {
+            id: sectionKey,
+            data: sections[sectionKey],
+        };
+    });
 }
 
 export function markSelectedProfiles(profiles, selectedProfiles) {

@@ -1,32 +1,40 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import {bindActionCreators} from 'redux';
 import {connect} from 'react-redux';
 
 import {setChannelDisplayName} from 'app/actions/views/channel';
 import {makeDirectChannel} from 'app/actions/views/more_dms';
-
-import {getCurrentChannel} from 'mattermost-redux/selectors/entities/channels';
-import {getTeammateNameDisplaySetting, getTheme} from 'mattermost-redux/selectors/entities/preferences';
-import {getCurrentUserId} from 'mattermost-redux/selectors/entities/users';
+import {isLandscape} from 'app/selectors/device';
+import {getConfig} from '@mm-redux/selectors/entities/general';
+import {getTeammateNameDisplaySetting, getTheme, getBool} from '@mm-redux/selectors/entities/preferences';
+import {isTimezoneEnabled} from '@mm-redux/selectors/entities/timezone';
+import Preferences from '@mm-redux/constants/preferences';
+import {loadBot} from '@mm-redux/actions/bots';
+import {getBotAccounts} from '@mm-redux/selectors/entities/bots';
+import {getCurrentUserId} from '@mm-redux/selectors/entities/users';
 
 import UserProfile from './user_profile';
 
 function mapStateToProps(state, ownProps) {
-    const {config} = state.entities.general;
+    const config = getConfig(state);
     const {createChannel: createChannelRequest} = state.requests.channels;
+    const militaryTime = getBool(state, Preferences.CATEGORY_DISPLAY_SETTINGS, 'use_military_time');
+    const enableTimezone = isTimezoneEnabled(state);
 
     return {
-        navigator: ownProps.navigator,
         config,
         createChannelRequest,
-        currentChannel: getCurrentChannel(state) || {},
         currentDisplayName: state.views.channel.displayName,
-        currentUserId: getCurrentUserId(state),
         user: state.entities.users.profiles[ownProps.userId],
+        bot: getBotAccounts(state)[ownProps.userId],
         teammateNameDisplay: getTeammateNameDisplaySetting(state),
-        theme: getTheme(state)
+        enableTimezone,
+        militaryTime,
+        theme: getTheme(state),
+        isMyUser: getCurrentUserId(state) === ownProps.userId,
+        isLandscape: isLandscape(state),
     };
 }
 
@@ -34,8 +42,9 @@ function mapDispatchToProps(dispatch) {
     return {
         actions: bindActionCreators({
             makeDirectChannel,
-            setChannelDisplayName
-        }, dispatch)
+            setChannelDisplayName,
+            loadBot,
+        }, dispatch),
     };
 }
 

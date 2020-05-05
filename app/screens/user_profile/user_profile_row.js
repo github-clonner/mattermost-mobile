@@ -1,18 +1,19 @@
-// Copyright (c) 2017-present Mattermost, Inc. All Rights Reserved.
-// See License.txt for license information.
+// Copyright (c) 2015-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
 
 import React from 'react';
 import PropTypes from 'prop-types';
 import {
     Switch,
     Text,
-    TouchableHighlight,
-    View
+    View,
 } from 'react-native';
 
 import {changeOpacity, makeStyleSheetFromTheme} from 'app/utils/theme';
 import FormattedText from 'app/components/formatted_text';
-import VectorIcon from 'app/components/vector_icon.js';
+import {paddingHorizontal as padding} from 'app/components/safe_area_view/iphone_x_spacing';
+import TouchableWithFeedback from 'app/components/touchable_with_feedback';
+import VectorIcon from 'app/components/vector_icon';
 
 const createStyleSheet = makeStyleSheetFromTheme((theme) => {
     return {
@@ -24,44 +25,44 @@ const createStyleSheet = makeStyleSheetFromTheme((theme) => {
             borderTopWidth: 1,
             borderBottomWidth: 1,
             borderTopColor: changeOpacity(theme.centerChannelColor, 0.3),
-            borderBottomColor: changeOpacity(theme.centerChannelColor, 0.3)
+            borderBottomColor: changeOpacity(theme.centerChannelColor, 0.3),
         },
         detail: {
             marginHorizontal: 15,
             color: 'rgba(0, 0, 0, 0.5)',
-            fontSize: 15
+            fontSize: 15,
         },
         label: {
             flex: 1,
             marginLeft: 15,
             fontSize: 15,
             paddingVertical: 15,
-            color: theme.centerChannelColor
+            color: theme.centerChannelColor,
         },
         leftIcon: {
             width: 17,
-            color: theme.centerChannelColor
+            color: theme.centerChannelColor,
         },
         rightIcon: {
             color: theme.centerChannelColor,
-            opacity: 0.7
+            opacity: 0.7,
         },
         wrapper: {
-            backgroundColor: '#ddd'
-        }
+            backgroundColor: '#ddd',
+        },
     };
 });
 
 function createTouchableComponent(children, action) {
     return (
-        <TouchableHighlight onPress={action}>
+        <TouchableWithFeedback onPress={action}>
             {children}
-        </TouchableHighlight>
+        </TouchableWithFeedback>
     );
 }
 
 function userProfileRow(props) {
-    const {action, defaultMessage, detail, icon, textId, togglable, theme, iconType, iconSize, shouldRender = true} = props;
+    const {action, defaultMessage, detail, icon, textId, togglable, theme, iconType, iconSize, shouldRender = true, isLandscape} = props;
 
     if (!shouldRender) {
         return null;
@@ -71,7 +72,7 @@ function userProfileRow(props) {
 
     const RowComponent = (
         <View style={style.wrapper}>
-            <View style={style.container}>
+            <View style={[style.container, padding(isLandscape, +15)]}>
                 <VectorIcon
                     name={icon}
                     size={iconSize}
@@ -113,7 +114,7 @@ userProfileRow.propTypes = {
     detail: PropTypes.oneOfType([
         PropTypes.string,
         PropTypes.number,
-        PropTypes.bool
+        PropTypes.bool,
     ]),
     icon: PropTypes.string.isRequired,
     iconType: PropTypes.oneOf(['fontawesome', 'foundation', 'ion', 'material']),
@@ -122,14 +123,16 @@ userProfileRow.propTypes = {
     textId: PropTypes.string.isRequired,
     togglable: PropTypes.bool,
     textColor: PropTypes.string,
-    theme: PropTypes.object.isRequired
+    theme: PropTypes.object.isRequired,
+    isLandscape: PropTypes.bool.isRequired,
 };
 
 userProfileRow.defaultProps = {
     iconColor: 'rgba(0, 0, 0, 0.7)',
     iconSize: 15,
     textColor: '#000',
-    togglable: false
+    togglable: false,
+    isLandscape: false,
 };
 
 export default userProfileRow;
